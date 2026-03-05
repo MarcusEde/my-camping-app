@@ -29,6 +29,7 @@ async function generateItinerary(
   campground: Campground,
   places: CachedPlace[],
   weather: WeatherData | null,
+  lang: string = "sv",
 ): Promise<Itinerary | null> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -38,7 +39,7 @@ async function generateItinerary(
 
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash",
+    model: "gemini-2.5-flash", // Using stable flash model
     generationConfig: { responseMimeType: "application/json" },
   });
 
@@ -46,48 +47,48 @@ async function generateItinerary(
     ? `${weather.temp}°C and ${weather.description}. Is raining: ${weather.isRaining}`
     : "Unknown weather.";
 
-  const availablePlaces = places.map((p) => ({
-    name: p.name,
-    category: p.category,
-    is_indoor: p.is_indoor,
-    rating: p.rating,
-    is_pinned_by_owner: p.is_pinned,
-    owner_note: p.owner_note,
-  }));
+  // Filter out hidden places so AI doesn't recommend them
+  const availablePlaces = places
+    .filter((p) => !p.is_hidden)
+    .map((p) => ({
+      name: p.name,
+      category: p.category,
+      is_indoor: p.is_indoor,
+      rating: p.rating,
+      is_pinned: p.is_pinned,
+      owner_note: p.owner_note,
+    }));
 
   const prompt = `
-    You are an expert, friendly local concierge at ${campground.name}.
-    Your job is to create a perfect 1-day itinerary for a tourist.
+    You are a friendly local concierge at ${campground.name}.
+    Create a 1-day itinerary for a guest.
 
-    CURRENT WEATHER: ${weatherStr}
-    AVAILABLE PLACES TO RECOMMEND: ${JSON.stringify(availablePlaces)}
+    LANGUAGE: Respond entirely in ${lang === "sv" ? "Swedish" : "English"}.
+    WEATHER: ${weatherStr}
+    PLACES: ${JSON.stringify(availablePlaces)}
 
     RULES:
-    1. If it is raining, you MUST heavily prioritize indoor activities.
-    2. Try to include places that the owner has "pinned" (is_pinned_by_owner: true).
-    3. The schedule must make geographic and logical sense (e.g. Coffee in morning, Dinner in evening).
-    4. Provide a friendly "tip_of_the_day" based on the weather.
+    1. If raining, prioritize indoor activities.
+    2. Prioritize "pinned" places.
+    3. If a place has an "owner_note", include that tip in the description but TRANSLATE it to ${lang}.
+    4. Return ONLY JSON.
 
-    Return EXACTLY this JSON structure. DO NOT wrap it in markdown blockticks.
+    Structure:
     {
-      "tip_of_the_day": "A friendly 1-sentence tip.",
-      "morning": { "time": "09:00", "title": "Catchy Title", "description": "Why go here...", "place_name": "Exact Name of Place from list" },
-      "afternoon": { "time": "13:00", "title": "Catchy Title", "description": "Why go here...", "place_name": "Exact Name of Place from list" },
-      "evening": { "time": "18:30", "title": "Catchy Title", "description": "Why go here...", "place_name": "Exact Name of Place from list" }
+      "tip_of_the_day": "...",
+      "morning": { "time": "09:00", "title": "...", "description": "...", "place_name": "..." },
+      "afternoon": { "time": "13:00", "title": "...", "description": "...", "place_name": "..." },
+      "evening": { "time": "18:30", "title": "...", "description": "...", "place_name": "..." }
     }
   `;
 
   try {
-    console.log("🧠 Calling Gemini AI (2.5 Flash)...");
     const result = await model.generateContent(prompt);
-    let jsonText = result.response.text();
-
-    // Safety net for markdown formatting
-    jsonText = jsonText
+    const jsonText = result.response
+      .text()
       .replace(/```json/gi, "")
       .replace(/```/g, "")
       .trim();
-
     return JSON.parse(jsonText) as Itinerary;
   } catch (error) {
     console.error("❌ Gemini AI Error:", error);
@@ -96,18 +97,21 @@ async function generateItinerary(
 }
 
 /**
- * 🧊 THE MONEY SAVER: Cached Version
- * Next.js unstable_cache wraps our function so it only runs ONCE per hour.
+ * FIXED CACHE: This now only busts if the day changes or the weather flips (Rain vs Clear).
+ * Editing a note will NOT bust this cache anymore.
  */
-// AT THE BOTTOM OF src/lib/planner.ts
-export const getCachedItinerary = unstable_cache(
-  async (
-    campground: Campground,
-    places: CachedPlace[],
-    weather: WeatherData | null,
-  ) => {
-    return generateItinerary(campground, places, weather);
-  },
-  ["daily-ai-itinerary-v2"], // 👈 CHANGED THIS TO BUST THE CACHE!
-  { revalidate: 3600 },
-);
+export async function getCachedItinerary(
+  campground: Campground,
+  places: CachedPlace[],
+  weather: WeatherData | null,
+  lang: string = "sv",
+) {
+  const dateKey = new Date().toISOString().split("T")[0];
+  const weatherKey = weather?.isRaining ? "rain" : "clear";
+
+  return unstable_cache(
+    () => generateItinerary(campground, places, weather, lang),
+    [`itinerary-${campground.id}-${dateKey}-${weatherKey}-${lang}`],
+    { revalidate: 3600 },
+  )();
+}
