@@ -1,6 +1,18 @@
+// src/app/dashboard/page.tsx
 import { createClient } from "@/lib/supabase/server";
+import {
+  ExternalLink,
+  Plus,
+  ShieldCheck
+} from "lucide-react";
 import { redirect } from "next/navigation";
-import { logout, saveNote, toggleHide, togglePin } from "./actions";
+import {
+  addCustomRental,
+  logout,
+  saveNote,
+  toggleHide,
+  togglePin,
+} from "./actions";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -14,12 +26,8 @@ export default async function DashboardPage() {
     .select("*")
     .eq("owner_id", user.id)
     .single();
-  if (!campground)
-    return (
-      <div className="p-20 text-center">
-        No campground found for this account.
-      </div>
-    );
+
+  if (!campground) return <OnboardingUI />;
 
   const { data: places } = await supabase
     .from("cached_places")
@@ -28,115 +36,172 @@ export default async function DashboardPage() {
     .order("is_pinned", { ascending: false });
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
-      <header className="bg-white border-b px-8 py-4 flex justify-between items-center sticky top-0 z-10">
-        <h1 className="text-xl font-bold flex items-center gap-2">
-          🏕️ {campground.name}{" "}
-          <span className="text-slate-400 font-normal">Dashboard</span>
-        </h1>
-        <form action={logout}>
-          <button className="text-sm text-slate-500 hover:text-red-600 font-bold transition-colors">
-            Log Out
-          </button>
-        </form>
-      </header>
+    <div className="min-h-screen bg-[#fcfcfd] flex flex-col font-sans text-slate-900">
+      {/* PROFESSIONAL NAV */}
+      <nav className="h-14 bg-white border-b border-slate-200 px-6 flex items-center justify-between sticky top-0 z-50">
+        <div className="flex items-center gap-3">
+          <div className="w-7 h-7 bg-indigo-600 rounded flex items-center justify-center text-white font-bold text-xs">
+            {campground.name[0]}
+          </div>
+          <span className="text-sm font-semibold tracking-tight">
+            {campground.name} Console
+          </span>
+        </div>
+        <div className="flex items-center gap-4">
+          <a
+            href={`/camp/${campground.slug}`}
+            target="_blank"
+            className="text-xs font-medium text-slate-500 hover:text-indigo-600 flex items-center gap-1 transition-colors"
+          >
+            View Live Site <ExternalLink size={12} />
+          </a>
+          <form action={logout}>
+            <button className="text-xs font-medium text-slate-400 hover:text-red-500 transition-colors">
+              Sign Out
+            </button>
+          </form>
+        </div>
+      </nav>
 
-      <main className="max-w-5xl mx-auto w-full p-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-          <div className="md:col-span-2 bg-slate-900 text-white p-6 rounded-2xl shadow-lg flex flex-col justify-between">
-            <div>
-              <h2 className="text-lg font-bold">Public Concierge Link</h2>
-              <p className="text-slate-400 text-sm mb-4">
-                Share this link with your guests.
-              </p>
-            </div>
-            <a
-              href={`/camp/${campground.slug}`}
-              target="_blank"
-              className="bg-emerald-500 hover:bg-emerald-600 text-white text-center py-2.5 rounded-xl font-bold text-sm transition-all"
-            >
-              Preview Guest App ↗
-            </a>
-          </div>
-          <div className="bg-white border p-6 rounded-2xl shadow-sm flex flex-col items-center justify-center">
-            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-2">
-              Staff Picks
-            </p>
-            <p className="text-5xl font-bold text-amber-500">
-              {places?.filter((p) => p.is_pinned).length}
+      <main className="max-w-6xl mx-auto w-full p-8 space-y-10">
+        {/* HEADER SECTION */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-8">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+              Service Management
+            </h1>
+            <p className="text-sm text-slate-500 mt-1">
+              Control the digital experience for your guests at{" "}
+              {campground.name}.
             </p>
           </div>
+
+          {/* THE "ADD SERVICE" ACTION BAR - Professional alternative to bubbles */}
+          <form
+            action={addCustomRental}
+            className="flex items-center gap-2 bg-white p-1.5 border border-slate-200 rounded-lg shadow-sm"
+          >
+            <input
+              name="name"
+              placeholder="e.g. Electric Bike Hire"
+              className="bg-transparent border-none text-sm px-3 py-1 outline-none w-48 md:w-64"
+              required
+            />
+            <button className="bg-indigo-600 text-white px-4 py-1.5 rounded-md text-xs font-bold hover:bg-indigo-700 flex items-center gap-2 transition-all">
+              <Plus size={14} /> Add Service
+            </button>
+          </form>
         </div>
 
-        <div className="bg-white rounded-2xl border shadow-sm divide-y overflow-hidden">
-          <div className="p-6 bg-slate-50/50">
-            <h2 className="font-bold text-slate-800 tracking-tight">
-              Curation Management
-            </h2>
-          </div>
-          {places?.map((place) => (
-            <div
-              key={place.id}
-              className={`p-6 flex flex-col md:flex-row gap-6 transition-all ${place.is_hidden ? "bg-slate-50 opacity-40 grayscale" : "hover:bg-slate-50/20"}`}
-            >
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className="font-bold text-slate-900">{place.name}</h3>
-                  {place.is_pinned && (
-                    <span className="text-[10px] bg-amber-100 text-amber-700 font-bold px-2 py-0.5 rounded-full uppercase">
-                      Staff Pick
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-slate-500 mb-4 capitalize">
-                  {place.category.replace("_", " ")} • ⭐{" "}
-                  {place.rating || "N/A"}
-                </p>
-                <form action={saveNote} className="flex gap-2">
-                  <input type="hidden" name="place_id" value={place.id} />
-                  <input
-                    name="note"
-                    defaultValue={place.owner_note || ""}
-                    placeholder="Add an insider tip..."
-                    className="flex-1 border rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500/20 border-slate-200 outline-none"
-                  />
-                  <button className="bg-slate-900 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-black transition-all">
-                    Save
-                  </button>
-                </form>
-              </div>
-              <div className="flex md:flex-col gap-2 shrink-0">
-                <form action={togglePin} className="flex-1">
-                  <input type="hidden" name="place_id" value={place.id} />
-                  <input
-                    type="hidden"
-                    name="current_status"
-                    value={place.is_pinned.toString()}
-                  />
-                  <button
-                    className={`w-full py-2.5 px-4 rounded-xl text-[10px] font-bold border transition-all ${place.is_pinned ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-white border-slate-200 text-slate-600"}`}
-                  >
-                    {place.is_pinned ? "★ Pinned" : "☆ Pin Item"}
-                  </button>
-                </form>
-                <form action={toggleHide} className="flex-1">
-                  <input type="hidden" name="place_id" value={place.id} />
-                  <input
-                    type="hidden"
-                    name="current_status"
-                    value={place.is_hidden.toString()}
-                  />
-                  <button
-                    className={`w-full py-2.5 px-4 rounded-xl text-[10px] font-bold border transition-all ${place.is_hidden ? "bg-slate-800 text-white" : "bg-white border-slate-200 text-red-500 hover:bg-red-50"}`}
-                  >
-                    {place.is_hidden ? "Show" : "Hide"}
-                  </button>
-                </form>
-              </div>
-            </div>
-          ))}
+        {/* DATA TABLE - The "B2B" Standard */}
+        <div className="bg-white border border-slate-200 rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.05)] overflow-hidden">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50/50 border-b border-slate-200">
+                <th className="px-6 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                  Service / Location
+                </th>
+                <th className="px-6 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                  Status
+                </th>
+                <th className="px-6 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                  Guest Note (Insider Tip)
+                </th>
+                <th className="px-6 py-3 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {places?.map((place) => (
+                <tr
+                  key={place.id}
+                  className={`group hover:bg-slate-50/50 transition-colors ${place.is_hidden ? "opacity-50 grayscale" : ""}`}
+                >
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`w-2 h-2 rounded-full ${place.is_pinned ? "bg-amber-400" : "bg-slate-200"}`}
+                      />
+                      <div>
+                        <p className="text-sm font-bold text-slate-800">
+                          {place.name}
+                        </p>
+                        <p className="text-[10px] text-slate-400 capitalize">
+                          {place.category.replace("_", " ")}
+                        </p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    {place.is_pinned && (
+                      <span className="text-[9px] bg-amber-50 text-amber-600 font-black px-2 py-0.5 rounded border border-amber-100 uppercase">
+                        Staff Pick
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4">
+                    <form action={saveNote} className="flex items-center gap-2">
+                      <input type="hidden" name="place_id" value={place.id} />
+                      <input
+                        name="note"
+                        defaultValue={place.owner_note || ""}
+                        placeholder="Add tip..."
+                        className="bg-transparent border-none text-xs text-slate-500 italic w-full focus:ring-0 outline-none hover:text-slate-900 transition-colors"
+                      />
+                    </form>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <form action={togglePin}>
+                        <input type="hidden" name="place_id" value={place.id} />
+                        <input
+                          type="hidden"
+                          name="current_status"
+                          value={place.is_pinned.toString()}
+                        />
+                        <button
+                          className={`p-1.5 rounded border ${place.is_pinned ? "bg-amber-50 border-amber-200 text-amber-600" : "bg-white text-slate-300 hover:text-amber-500"}`}
+                        >
+                          ★
+                        </button>
+                      </form>
+                      <form action={toggleHide}>
+                        <input type="hidden" name="place_id" value={place.id} />
+                        <input
+                          type="hidden"
+                          name="current_status"
+                          value={place.is_hidden.toString()}
+                        />
+                        <button className="p-1.5 rounded border bg-white text-slate-300 hover:text-red-500">
+                          {place.is_hidden ? "Show" : "Hide"}
+                        </button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </main>
+    </div>
+  );
+}
+
+function OnboardingUI() {
+  return (
+    <div className="min-h-screen flex items-center justify-center p-8 bg-slate-50">
+      <div className="max-w-md w-full bg-white p-10 rounded-2xl shadow-sm border border-slate-200 text-center">
+        <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-6">
+          <ShieldCheck size={24} />
+        </div>
+        <h2 className="text-xl font-bold text-slate-900">Identity Pending</h2>
+        <p className="text-sm text-slate-500 mt-2">
+          Your account needs to be verified before you can access the Åsa
+          Camping dashboard.
+        </p>
+      </div>
     </div>
   );
 }
