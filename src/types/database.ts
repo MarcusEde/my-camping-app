@@ -23,13 +23,9 @@ export interface Campground {
   subscription_status: SubscriptionStatus;
   trial_ends_at: string;
   created_at: string;
-  
-  // 🎨 BRANDING & DESIGN
-  primary_color: string;      // Standard: '#2A3C34'
+  primary_color: string;
   secondary_color: string | null;
   logo_url: string | null;
-
-  // 📶 GUEST INFORMATION (Digital Gästpärm)
   wifi_name: string | null;
   wifi_password: string | null;
   check_out_info: string | null;
@@ -40,7 +36,7 @@ export interface Campground {
 export interface CachedPlace {
   id: string;
   campground_id: string;
-  google_place_id: string;
+  google_place_id: string | null;
   name: string;
   address: string | null;
   rating: number | null;
@@ -51,30 +47,20 @@ export interface CachedPlace {
   raw_data: Record<string, unknown> | null;
   fetched_at: string;
   created_at: string;
-
-  // 🌟 CURATION COLUMNS
   is_pinned: boolean;
   is_hidden: boolean;
   owner_note: string | null;
 }
 
-/**
- * Notice Board / Announcements
- * For the "Dagens anslagstavla" feature
- */
 export interface Announcement {
   id: string;
   campground_id: string;
   title: string;
   content: string;
-  type: 'info' | 'event' | 'warning';
+  type: "info" | "event" | "warning";
   created_at: string;
 }
 
-/**
- * PromotedPartner
- * A local business that PAYS the campground owner
- */
 export interface PromotedPartner {
   id: string;
   campground_id: string;
