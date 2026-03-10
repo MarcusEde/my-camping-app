@@ -4,12 +4,16 @@ export const CATEGORY_ICONS: Record<PlaceCategory, string> = {
   restaurant: "🍽️",
   cafe: "☕",
   museum: "🏛️",
-  park: "🌳",
+  park: "🌲",
   beach: "🏖️",
   bowling: "🎳",
   swimming: "🏊",
   shopping: "🛍️",
   cinema: "🎬",
-  spa: "💆",
-  other: "📍",
+  spa: "🧖",
+  activity: "🎯", // ← add
+  playground: "🛝", // ← add
+  sports: "🏸", // ← add
+  attraction: "🎡", // ← add
+  other: "⭐",
 };
