@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
       allowedOrigins: [
-        "https://my-camping-app.marcus-edevag.workers.dev/",
+        "my-camping-app.marcus-edevag.workers.dev",
         "localhost:3000",
       ],
     },
@@ -13,4 +13,3 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
-import("@opennextjs/cloudflare").then((m) => m.initOpenNextCloudflareForDev());
