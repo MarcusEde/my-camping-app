@@ -129,7 +129,7 @@ export default function PlacesManager({ campground, places }: Props) {
   };
 
   const handleAddPlace = () => {
-    if (!newName.trim()) return;
+    if (!newName.trim() || (!newAddress.trim() && !newIsOnSite)) return;
     startTransition(async () => {
       try {
         await addCustomPlace(
@@ -138,7 +138,7 @@ export default function PlacesManager({ campground, places }: Props) {
           newCategory,
           newAddress.trim() || undefined,
           newIsOnSite,
-          newCustomHours.trim() || undefined
+          newCustomHours.trim() || undefined,
         );
         setNewName("");
         setNewAddress("");
@@ -183,6 +183,10 @@ export default function PlacesManager({ campground, places }: Props) {
     // Close note editor if open
     setEditingNoteId(null);
   };
+
+  // Validation boolean for the add form
+  const isAddFormValid =
+    newName.trim() !== "" && (newAddress.trim() !== "" || newIsOnSite);
 
   return (
     <div className="space-y-4">
@@ -307,7 +311,7 @@ export default function PlacesManager({ campground, places }: Props) {
               type="text"
               value={newAddress}
               onChange={(e) => setNewAddress(e.target.value)}
-              placeholder="Adress (valfritt)"
+              placeholder="Adress (Krävs om inte platsen ligger på området)"
               className="w-full rounded-[10px] bg-white px-3.5 py-2.5 text-[12px] font-medium text-stone-800 ring-1 ring-stone-200/60 placeholder:text-stone-300 focus:outline-none focus:ring-2"
               style={
                 {
@@ -387,7 +391,10 @@ export default function PlacesManager({ campground, places }: Props) {
               <div className="mb-2 flex items-center gap-2">
                 <div
                   className="flex h-6 w-6 items-center justify-center rounded-[6px]"
-                  style={{ backgroundColor: hexToRgba(brand, 0.07), color: brand }}
+                  style={{
+                    backgroundColor: hexToRgba(brand, 0.07),
+                    color: brand,
+                  }}
                 >
                   <Clock size={12} strokeWidth={2} />
                 </div>
@@ -412,22 +419,31 @@ export default function PlacesManager({ campground, places }: Props) {
               </p>
             </div>
 
-            <button
-              onClick={handleAddPlace}
-              disabled={!newName.trim() || isPending}
-              className="flex w-full items-center justify-center gap-2 rounded-full py-2.5 text-[11px] font-black uppercase tracking-[0.1em] text-white transition-all active:scale-95 disabled:opacity-50"
-              style={{
-                backgroundColor: brand,
-                boxShadow: `0 4px 14px ${hexToRgba(brand, 0.18)}`,
-              }}
-            >
-              {isPending ? (
-                <Loader2 size={13} className="animate-spin" />
-              ) : (
-                <Plus size={13} strokeWidth={2.5} />
+            <div className="flex flex-col gap-1.5">
+              <button
+                onClick={handleAddPlace}
+                disabled={!isAddFormValid || isPending}
+                className="flex w-full items-center justify-center gap-2 rounded-full py-2.5 text-[11px] font-black uppercase tracking-[0.1em] text-white transition-all active:scale-95 disabled:opacity-50"
+                style={{
+                  backgroundColor: brand,
+                  boxShadow: `0 4px 14px ${hexToRgba(brand, 0.18)}`,
+                }}
+              >
+                {isPending ? (
+                  <Loader2 size={13} className="animate-spin" />
+                ) : (
+                  <Plus size={13} strokeWidth={2.5} />
+                )}
+                Lägg till
+              </button>
+
+              {!isAddFormValid && newName.trim() !== "" && (
+                <p className="text-center text-[10px] text-red-500 font-medium">
+                  Platsen måste ha en adress eller vara markerad som "På
+                  campingområdet".
+                </p>
               )}
-              Lägg till
-            </button>
+            </div>
           </div>
         </div>
       )}
@@ -450,6 +466,11 @@ export default function PlacesManager({ campground, places }: Props) {
               const busy = actioningId === place.id;
               const editingNote = editingNoteId === place.id;
               const editingDetails = editingDetailsId === place.id;
+
+              const hasCoordinates = Boolean(place.latitude && place.longitude);
+              const hasAddress = Boolean(place.address);
+              const isEditDetailsValid =
+                hasAddress || hasCoordinates || editIsOnSite;
 
               return (
                 <div
@@ -545,7 +566,7 @@ export default function PlacesManager({ campground, places }: Props) {
                         activeColor={brand}
                         onClick={() =>
                           withAction(place.id, () =>
-                            togglePin(place.id, place.is_pinned)
+                            togglePin(place.id, place.is_pinned),
                           )
                         }
                         disabled={busy}
@@ -567,7 +588,7 @@ export default function PlacesManager({ campground, places }: Props) {
                         activeColor="#78716c"
                         onClick={() =>
                           withAction(place.id, () =>
-                            toggleHide(place.id, place.is_hidden)
+                            toggleHide(place.id, place.is_hidden),
                           )
                         }
                         disabled={busy}
@@ -696,7 +717,9 @@ export default function PlacesManager({ campground, places }: Props) {
                             editIsOnSite ? "" : "bg-stone-200"
                           }`}
                           style={
-                            editIsOnSite ? { backgroundColor: brand } : undefined
+                            editIsOnSite
+                              ? { backgroundColor: brand }
+                              : undefined
                           }
                         >
                           <div
@@ -726,30 +749,38 @@ export default function PlacesManager({ campground, places }: Props) {
                         />
                       </div>
 
-                      {/* Save button */}
-                      <div className="flex justify-end gap-2">
-                        <button
-                          onClick={() => setEditingDetailsId(null)}
-                          className="rounded-full px-3.5 py-2 text-[10px] font-black uppercase tracking-[0.1em] text-stone-400 transition-colors hover:bg-white hover:text-stone-600"
-                        >
-                          Avbryt
-                        </button>
-                        <button
-                          onClick={() => handleSaveDetails(place.id)}
-                          disabled={isPending}
-                          className="flex items-center gap-1 rounded-full px-3.5 py-2 text-[10px] font-black uppercase tracking-[0.1em] text-white transition-all active:scale-95"
-                          style={{
-                            backgroundColor: brand,
-                            boxShadow: `0 2px 8px ${hexToRgba(brand, 0.18)}`,
-                          }}
-                        >
-                          {busy ? (
-                            <Loader2 size={11} className="animate-spin" />
-                          ) : (
-                            <Check size={11} strokeWidth={2.5} />
-                          )}
-                          Spara
-                        </button>
+                      {/* Save button and validation message */}
+                      <div className="flex flex-col gap-2 pt-1">
+                        {!isEditDetailsValid && (
+                          <p className="text-right text-[9px] text-red-500 font-medium">
+                            Eftersom platsen saknar adress måste den vara "På
+                            campingområdet".
+                          </p>
+                        )}
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => setEditingDetailsId(null)}
+                            className="rounded-full px-3.5 py-2 text-[10px] font-black uppercase tracking-[0.1em] text-stone-400 transition-colors hover:bg-white hover:text-stone-600"
+                          >
+                            Avbryt
+                          </button>
+                          <button
+                            onClick={() => handleSaveDetails(place.id)}
+                            disabled={isPending || !isEditDetailsValid}
+                            className="flex items-center gap-1 rounded-full px-3.5 py-2 text-[10px] font-black uppercase tracking-[0.1em] text-white transition-all active:scale-95 disabled:opacity-50"
+                            style={{
+                              backgroundColor: brand,
+                              boxShadow: `0 2px 8px ${hexToRgba(brand, 0.18)}`,
+                            }}
+                          >
+                            {busy ? (
+                              <Loader2 size={11} className="animate-spin" />
+                            ) : (
+                              <Check size={11} strokeWidth={2.5} />
+                            )}
+                            Spara
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
