@@ -281,6 +281,10 @@ const MAX_ROAD_KM: Record<PlaceCategory, number> = {
   spa: 35,
   bowling: 25,
   swimming: 25,
+  activity: 30, // ← added
+  playground: 15, // ← added
+  sports: 25, // ← added
+  attraction: 50,
   other: 50,
 };
 
@@ -296,6 +300,10 @@ const MAX_PER_CATEGORY: Record<PlaceCategory, number> = {
   spa: 3,
   bowling: 3,
   swimming: 4,
+  activity: 8, // ← added
+  playground: 6, // ← added
+  sports: 6, // ← added
+  attraction: 6,
 };
 
 /* ═══════════════════════════════════════════════════════════
