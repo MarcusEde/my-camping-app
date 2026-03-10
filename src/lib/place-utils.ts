@@ -14,6 +14,11 @@ import { calculateDistanceKm, formatDistance } from "./distance";
  *   "Wednesday: Closed"
  *   "Torsdag: Öppet dygnet runt"
  *   "Friday: Open 24 hours"
+ *
+ * IMPORTANT: Google's `openNow` field is cached from fetch time
+ * and may be hours or days stale. We ALWAYS calculate live from
+ * parsed hours. `openNow` is only used as a last resort when
+ * the hours text is unparseable.
  */
 export function getTodaysOpeningHours(
   rawData: any,
@@ -32,7 +37,9 @@ export function getTodaysOpeningHours(
 
   if (!descriptions || descriptions.length === 0) return null;
 
-  // ── 2. Get "open now" from Google (most reliable) ───────
+  // ── 2. Stale "open now" from Google — LAST RESORT ONLY ──
+  // This value reflects the state at fetch time, not right now.
+  // Only used in step 7 when we can't parse the hours text.
   const googleOpenNow: boolean | null = hoursSource?.openNow ?? null;
 
   // ── 3. Find today's entry ───────────────────────────────
@@ -85,8 +92,8 @@ export function getTodaysOpeningHours(
     const closeH = parseInt(match24[3], 10);
     const closeM = parseInt(match24[4], 10);
 
-    const isOpenNow =
-      googleOpenNow ?? calculateIsOpen(openH, openM, closeH, closeM);
+    // ALWAYS calculate live — googleOpenNow is stale
+    const isOpenNow = calculateIsOpen(openH, openM, closeH, closeM);
 
     // Format display as "09:00 – 18:00"
     const displayText = `${pad(openH)}:${pad(openM)} – ${pad(closeH)}:${pad(closeM)}`;
@@ -105,15 +112,18 @@ export function getTodaysOpeningHours(
     const closeH = to24h(parseInt(match12[4], 10), match12[6]);
     const closeM = parseInt(match12[5], 10);
 
-    const isOpenNow =
-      googleOpenNow ?? calculateIsOpen(openH, openM, closeH, closeM);
+    // ALWAYS calculate live — googleOpenNow is stale
+    const isOpenNow = calculateIsOpen(openH, openM, closeH, closeM);
 
     const displayText = `${pad(openH)}:${pad(openM)} – ${pad(closeH)}:${pad(closeM)}`;
 
     return { text: displayText, isOpenNow };
   }
 
-  // ── 7. Fallback: return raw text ────────────────────────
+  // ── 7. Fallback: unparseable hours text ─────────────────
+  // We couldn't extract open/close times, so we can't calculate.
+  // Use Google's stale openNow as a last resort. Default to false
+  // (safer to show "Closed" than incorrectly show "Open").
   return { text: hoursOnly, isOpenNow: googleOpenNow ?? false };
 }
 
