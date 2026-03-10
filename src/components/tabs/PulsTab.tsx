@@ -1,3 +1,4 @@
+// src/components/tabs/PulsTab.tsx
 "use client";
 
 /**
@@ -89,15 +90,17 @@ const EMOJI: Record<string, string> = {
 };
 
 /* ── Map link builder ────────────────────────────────── */
-function buildMapLink(
+function getGoogleMapsLink(
   lat?: number | null,
   lng?: number | null,
-  name?: string,
+  address?: string | null,
 ): string | null {
-  if (lat && lng)
+  if (lat && lng) {
     return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
-  if (name)
-    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}`;
+  }
+  if (address) {
+    return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
+  }
   return null;
 }
 
@@ -132,6 +135,7 @@ const t: Record<
     contact: string;
     open: string;
     closed: string;
+    onSite: string;
   }
 > = {
   sv: {
@@ -162,6 +166,7 @@ const t: Record<
     contact: "Behöver du hjälp?",
     open: "Öppet",
     closed: "Stängt",
+    onSite: "På området",
   },
   en: {
     wifi: "Wi-Fi",
@@ -191,6 +196,7 @@ const t: Record<
     contact: "Need help?",
     open: "Open",
     closed: "Closed",
+    onSite: "On site",
   },
   de: {
     wifi: "WLAN",
@@ -220,6 +226,7 @@ const t: Record<
     contact: "Brauchen Sie Hilfe?",
     open: "Geöffnet",
     closed: "Geschlossen",
+    onSite: "Auf dem Platz",
   },
   da: {
     wifi: "Wi-Fi",
@@ -249,6 +256,7 @@ const t: Record<
     contact: "Brug for hjælp?",
     open: "Åbent",
     closed: "Lukket",
+    onSite: "På pladsen",
   },
 };
 
@@ -335,17 +343,15 @@ export default function PulsTab({
     setAdvisedPlace(pool[dayOfMonth % pool.length]);
   }, [pinnedPlaces, weather]);
 
-  const isAdvisedOnSite =
-    (advisedPlace as CachedPlace & { is_on_site?: boolean })?.is_on_site ??
-    false;
-  const adviceMapLink =
-    advisedPlace && !isAdvisedOnSite
-      ? buildMapLink(
-          advisedPlace.latitude,
-          advisedPlace.longitude,
-          advisedPlace.name,
-        )
-      : null;
+  const isAdvisedOnSite = advisedPlace?.is_on_site ?? false;
+  const adviceMapLink = advisedPlace
+    ? getGoogleMapsLink(
+        advisedPlace.latitude,
+        advisedPlace.longitude,
+        advisedPlace.address,
+      )
+    : null;
+  const canNavigateTip = !!adviceMapLink;
 
   const liveNotices = useMemo(
     () =>
@@ -358,9 +364,13 @@ export default function PulsTab({
     [announcements],
   );
 
+  // Fall back to empty search if no campground address exists
   const receptionMapLink =
-    buildMapLink(campground.latitude, campground.longitude, campground.name) ??
-    "#";
+    getGoogleMapsLink(
+      campground.latitude,
+      campground.longitude,
+      campground.address,
+    ) ?? "#";
 
   const copyPassword = () => {
     if (campground.wifi_password) {
@@ -584,7 +594,7 @@ export default function PulsTab({
       {/* ═══════════════════════════════════════════════
          3. TODAY'S TIP
          ═══════════════════════════════════════════════ */}
-      {advisedPlace && adviceMapLink && (
+      {advisedPlace && (
         <motion.section variants={fadeUp}>
           <RowHeader
             icon={
@@ -597,40 +607,63 @@ export default function PulsTab({
             text={weather?.isRaining || isColdForTip ? l.rainTip : l.sunTip}
             brand={brand}
           />
-          <motion.a
-            href={adviceMapLink ?? "#"}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-3 rounded-[18px] bg-white px-4 py-3.5 ring-1 ring-stone-200/60"
-            style={{
-              boxShadow:
-                "0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.03)",
-            }}
-            whileTap={{ scale: 0.97 }}
-            transition={SPRING_TAP}
-          >
-            <div
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] text-lg"
-              style={{ backgroundColor: hexToRgba(brand, 0.06) }}
+
+          {canNavigateTip ? (
+            <motion.a
+              href={adviceMapLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-3 rounded-[18px] bg-white px-4 py-3.5 ring-1 ring-stone-200/60"
+              style={{
+                boxShadow:
+                  "0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.03)",
+              }}
+              whileTap={{ scale: 0.97 }}
+              transition={SPRING_TAP}
             >
-              {EMOJI[advisedPlace.category] ?? "📍"}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] font-bold text-stone-800">
-                {advisedPlace.name}
-              </p>
-              <p className="mt-0.5 text-[10px] font-black uppercase tracking-[0.2em] text-stone-300">
-                {distanceMap[advisedPlace.id] ?? ""}
-              </p>
-            </div>
-            <div
-              className="flex h-7 shrink-0 items-center gap-1.5 rounded-full px-3 text-[10px] font-black uppercase tracking-[0.1em] text-white"
-              style={{ backgroundColor: brand }}
+              <TipContent
+                place={advisedPlace}
+                distanceMap={distanceMap}
+                brand={brand}
+              />
+              <div
+                className="flex h-7 shrink-0 items-center gap-1.5 rounded-full px-3 text-[10px] font-black uppercase tracking-[0.1em] text-white"
+                style={{ backgroundColor: brand }}
+              >
+                <ExternalLink size={10} strokeWidth={2.5} />
+                {l.showWay}
+              </div>
+            </motion.a>
+          ) : (
+            <motion.div
+              className="flex items-center gap-3 rounded-[18px] bg-white px-4 py-3.5 ring-1 ring-stone-200/60"
+              style={{
+                boxShadow:
+                  "0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.03)",
+              }}
+              whileTap={{ scale: 0.97 }}
+              transition={SPRING_TAP}
             >
-              <ExternalLink size={10} strokeWidth={2.5} />
-              {l.showWay}
-            </div>
-          </motion.a>
+              <TipContent
+                place={advisedPlace}
+                distanceMap={distanceMap}
+                brand={brand}
+                isTipOnSite={isAdvisedOnSite}
+              />
+              {isAdvisedOnSite && (
+                <div
+                  className="flex h-7 shrink-0 items-center gap-1.5 rounded-full px-3 text-[10px] font-black uppercase tracking-[0.1em]"
+                  style={{
+                    backgroundColor: hexToRgba(brand, 0.08),
+                    color: brand,
+                  }}
+                >
+                  <MapPin size={10} strokeWidth={2.5} />
+                  {l.onSite}
+                </div>
+              )}
+            </motion.div>
+          )}
         </motion.section>
       )}
 
@@ -660,6 +693,7 @@ export default function PulsTab({
                   brand={brand}
                   openLabel={l.open}
                   closedLabel={l.closed}
+                  onSiteLabel={l.onSite}
                   lang={lang}
                 />
               </React.Fragment>
@@ -709,6 +743,39 @@ export default function PulsTab({
 /* ═══════════════════════════════════════════════════════
    SUB-COMPONENTS
    ═══════════════════════════════════════════════════════ */
+
+function TipContent({
+  place,
+  distanceMap,
+  brand,
+  isTipOnSite,
+}: {
+  place: CachedPlace;
+  distanceMap: RoadDistanceMap;
+  brand: string;
+  isTipOnSite?: boolean;
+}) {
+  return (
+    <>
+      <div
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] text-lg"
+        style={{ backgroundColor: hexToRgba(brand, 0.06) }}
+      >
+        {EMOJI[place.category] ?? "📍"}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[13px] font-bold text-stone-800">
+          {place.name}
+        </p>
+        {!isTipOnSite && (
+          <p className="mt-0.5 text-[10px] font-black uppercase tracking-[0.2em] text-stone-300">
+            {distanceMap[place.id] ?? ""}
+          </p>
+        )}
+      </div>
+    </>
+  );
+}
 
 function RowHeader({
   icon,
@@ -848,6 +915,7 @@ function DensePlaceRow({
   brand,
   openLabel,
   closedLabel,
+  onSiteLabel,
   lang,
 }: {
   place: CachedPlace;
@@ -855,24 +923,23 @@ function DensePlaceRow({
   brand: string;
   openLabel: string;
   closedLabel: string;
+  onSiteLabel: string;
   lang: Lang;
 }) {
-  const mapLink =
-    buildMapLink(place.latitude, place.longitude, place.name) ?? "#";
+  const mapLink = getGoogleMapsLink(
+    place.latitude,
+    place.longitude,
+    place.address,
+  );
+  const canNavigate = !!mapLink;
+
   const hoursData = getTodaysOpeningHours(place.raw_data);
   const isOpen = hoursData?.isOpenNow ?? null;
 
   const ownerNote = getOwnerNote(place, lang);
 
-  return (
-    <motion.a
-      href={mapLink}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="flex items-center gap-3 px-4 py-3"
-      whileTap={{ scale: 0.98 }}
-      transition={SPRING_TAP}
-    >
+  const innerContent = (
+    <>
       <div
         className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] text-sm"
         style={{ backgroundColor: hexToRgba(brand, 0.05) }}
@@ -885,9 +952,19 @@ function DensePlaceRow({
           {place.name}
         </p>
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] font-black uppercase tracking-[0.15em] text-stone-300">
-            {distance}
-          </span>
+          {place.is_on_site ? (
+            <span
+              className="text-[10px] font-black uppercase tracking-[0.15em]"
+              style={{ color: brand }}
+            >
+              {onSiteLabel}
+            </span>
+          ) : distance ? (
+            <span className="text-[10px] font-black uppercase tracking-[0.15em] text-stone-300">
+              {distance}
+            </span>
+          ) : null}
+
           {place.rating !== null && place.rating > 0 && (
             <>
               <span className="text-stone-200">·</span>
@@ -922,12 +999,35 @@ function DensePlaceRow({
         </span>
       )}
 
-      <ChevronRight
-        size={13}
-        strokeWidth={2}
-        className="shrink-0 text-stone-300"
-      />
+      {canNavigate && (
+        <ChevronRight
+          size={13}
+          strokeWidth={2}
+          className="shrink-0 text-stone-300"
+        />
+      )}
+    </>
+  );
+
+  return canNavigate ? (
+    <motion.a
+      href={mapLink}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-3 px-4 py-3"
+      whileTap={{ scale: 0.98 }}
+      transition={SPRING_TAP}
+    >
+      {innerContent}
     </motion.a>
+  ) : (
+    <motion.div
+      className="flex items-center gap-3 px-4 py-3"
+      whileTap={{ scale: 0.98 }}
+      transition={SPRING_TAP}
+    >
+      {innerContent}
+    </motion.div>
   );
 }
 
