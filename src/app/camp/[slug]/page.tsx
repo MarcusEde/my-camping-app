@@ -4,7 +4,27 @@ import { formatDistance } from "@/lib/distance";
 import { type RoadDistanceMap } from "@/lib/routing";
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
+interface SMHIParameter {
+  name: string;
+  values: number[];
+}
 
+interface SMHITimeSeries {
+  validTime: string;
+  parameters: SMHIParameter[];
+}
+
+interface SMHIResponse {
+  timeSeries?: SMHITimeSeries[];
+}
+
+interface OpenMeteoResponse {
+  current: {
+    temperature_2m: number;
+    windspeed_10m: number;
+    weathercode: number;
+  };
+}
 const MAX_PLACE_DISTANCE_KM = 50;
 
 async function fetchWeatherFromSMHI(
@@ -24,19 +44,20 @@ async function fetchWeatherFromSMHI(
       return null;
     }
 
-    const data = await res.json();
+    const data = (await res.json()) as SMHIResponse;
     const timeSeries = data?.timeSeries;
     if (!timeSeries || timeSeries.length === 0) return null;
 
     const now = Date.now();
     const closest =
-      timeSeries.find((ts: any) => {
+      timeSeries.find((ts: SMHITimeSeries) => {
         const forecastTime = new Date(ts.validTime).getTime();
         return Math.abs(forecastTime - now) < 1800000;
       }) || timeSeries[0];
 
     const getParam = (name: string) =>
-      closest.parameters.find((p: any) => p.name === name)?.values?.[0] ?? null;
+      closest.parameters.find((p: SMHIParameter) => p.name === name)
+        ?.values?.[0] ?? null;
 
     const wsymb2 = getParam("Wsymb2") ?? 1;
     const windSpeed = getParam("ws") ?? 0;
@@ -89,7 +110,7 @@ async function fetchWeather(
     { next: { revalidate: 300 } },
   );
   if (!res.ok) return null;
-  const data = await res.json();
+  const data = (await res.json()) as OpenMeteoResponse;
   const code = data.current.weathercode;
 
   // Improved Open-Meteo logic (45/48 = Fog)
@@ -164,8 +185,8 @@ export default async function CampPage({
   }
 
   // 2. Fetch all related data ONLY if active/trial
-  const [placesRes, announcementsRes, partnersRes, weather] = await Promise.all(
-    [
+  const [placesRes, announcementsRes, partnersRes, facilitiesRes, weather] =
+    await Promise.all([
       supabase
         .from("cached_places")
         .select("*")
@@ -183,9 +204,14 @@ export default async function CampPage({
         .eq("campground_id", campground.id)
         .eq("is_active", true)
         .order("priority_rank", { ascending: false }),
+      supabase // ← ADD
+        .from("internal_locations") // ← ADD
+        .select("*") // ← ADD
+        .eq("campground_id", campground.id) // ← ADD
+        .eq("is_active", true) // ← ADD
+        .order("walking_minutes", { ascending: true }), // ← ADD
       fetchWeather(campground.latitude, campground.longitude),
-    ],
-  );
+    ]);
 
   const rawPlaces = placesRes.data ?? [];
   const distanceMap: RoadDistanceMap = {};
@@ -202,6 +228,7 @@ export default async function CampPage({
       partners={partnersRes.data ?? []}
       weather={weather}
       distanceMap={distanceMap}
+      internalLocations={facilitiesRes.data ?? []} // ← ADD
     />
   );
 }

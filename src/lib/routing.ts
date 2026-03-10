@@ -8,7 +8,16 @@ import { formatDistance, getDistanceKm } from "./distance";
 
 const OSRM_BASE = "https://router.project-osrm.org";
 const OSRM_BATCH_SIZE = 40;
+interface OSRMTableResponse {
+  code: string;
+  distances?: number[][];
+  durations?: number[][];
+}
 
+interface OSRMRouteResponse {
+  code: string;
+  routes?: { distance: number; duration: number }[];
+}
 export interface Coordinate {
   lat: number;
   lon: number;
@@ -54,18 +63,18 @@ async function osrmTableBatch(
     if (!res.ok)
       return batch.map(() => ({ distance_km: null, duration_mins: null }));
 
-    const data = await res.json();
+    const data = (await res.json()) as OSRMTableResponse;
     if (data.code !== "Ok" || !data.distances || !data.durations)
       return batch.map(() => ({ distance_km: null, duration_mins: null }));
 
+    const { distances, durations } = data;
+
     return batch.map((_, i) => ({
       distance_km:
-        data.distances[0][i + 1] != null
-          ? data.distances[0][i + 1] / 1000
-          : null,
+        distances[0][i + 1] != null ? distances[0][i + 1] / 1000 : null,
       duration_mins:
-        data.durations[0][i + 1] != null
-          ? Math.round(data.durations[0][i + 1] / 60)
+        durations[0][i + 1] != null
+          ? Math.round(durations[0][i + 1] / 60)
           : null,
     }));
   } catch (err) {
@@ -181,7 +190,7 @@ export async function getOSRMRoute(
       5000,
     );
     if (!res.ok) return null;
-    const data = await res.json();
+    const data = (await res.json()) as OSRMRouteResponse;
     if (data.code !== "Ok" || !data.routes?.[0]) return null;
     return {
       distanceMeters: data.routes[0].distance,

@@ -15,7 +15,8 @@ import {
   Search,
   Star,
   Trash2,
-  X,
+  Umbrella,
+  X
 } from "lucide-react";
 import React, { useMemo, useState, useTransition } from "react";
 import {
@@ -52,6 +53,10 @@ const CATEGORY_META: Record<PlaceCategory, { emoji: string; label: string }> = {
   shopping: { emoji: "🛒", label: "Shopping" },
   cinema: { emoji: "🎬", label: "Bio" },
   spa: { emoji: "💆", label: "Spa" },
+  activity: { emoji: "🎯", label: "Aktivitet" },
+  playground: { emoji: "🛝", label: "Lekplats" },
+  sports: { emoji: "🏸", label: "Sport" },
+  attraction: { emoji: "🎡", label: "Attraktion" },
   other: { emoji: "📍", label: "Övrigt" },
 };
 
@@ -83,6 +88,7 @@ export default function PlacesManager({ campground, places }: Props) {
   const [newCategory, setNewCategory] = useState<PlaceCategory>("other");
   const [newAddress, setNewAddress] = useState("");
   const [newIsOnSite, setNewIsOnSite] = useState(false);
+  const [newIsIndoor, setNewIsIndoor] = useState(false);
   const [newCustomHours, setNewCustomHours] = useState("");
 
   // Note editing
@@ -92,6 +98,7 @@ export default function PlacesManager({ campground, places }: Props) {
   // Hours/details editing
   const [editingDetailsId, setEditingDetailsId] = useState<string | null>(null);
   const [editIsOnSite, setEditIsOnSite] = useState(false);
+  const [editIsIndoor, setEditIsIndoor] = useState(false);
   const [editCustomHours, setEditCustomHours] = useState("");
 
   const filtered = useMemo(() => {
@@ -138,12 +145,14 @@ export default function PlacesManager({ campground, places }: Props) {
           newCategory,
           newAddress.trim() || undefined,
           newIsOnSite,
+          newIsIndoor,
           newCustomHours.trim() || undefined,
         );
         setNewName("");
         setNewAddress("");
         setNewCategory("other");
         setNewIsOnSite(false);
+        setNewIsIndoor(false);
         setNewCustomHours("");
         setShowAddForm(false);
       } catch (e: unknown) {
@@ -165,6 +174,7 @@ export default function PlacesManager({ campground, places }: Props) {
     withAction(placeId, async () => {
       await updatePlaceDetails(placeId, {
         is_on_site: editIsOnSite,
+        is_indoor: editIsIndoor,
         custom_hours: editCustomHours.trim() || null,
       });
       setEditingDetailsId(null);
@@ -179,12 +189,11 @@ export default function PlacesManager({ campground, places }: Props) {
   const startEditingDetails = (place: CachedPlace) => {
     setEditingDetailsId(place.id);
     setEditIsOnSite(place.is_on_site ?? false);
+    setEditIsIndoor(place.is_indoor ?? false);
     setEditCustomHours(place.custom_hours ?? "");
-    // Close note editor if open
     setEditingNoteId(null);
   };
 
-  // Validation boolean for the add form
   const isAddFormValid =
     newName.trim() !== "" && (newAddress.trim() !== "" || newIsOnSite);
 
@@ -215,7 +224,14 @@ export default function PlacesManager({ campground, places }: Props) {
 
         {/* Filters row */}
         <div className="flex flex-wrap items-center gap-2">
-          <div className="scrollbar-hide flex gap-1 overflow-x-auto">
+          <div
+            className="flex gap-1 overflow-x-auto"
+            style={{
+              WebkitOverflowScrolling: "touch",
+              scrollbarWidth: "none",
+              msOverflowStyle: "none",
+            }}
+          >
             {availableCats.map((cat) => {
               const meta =
                 cat === "all"
@@ -299,7 +315,7 @@ export default function PlacesManager({ campground, places }: Props) {
               type="text"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              placeholder="Namn, t.ex. Cykeluthyrning"
+              placeholder="Namn, t.ex. Minigolf eller Cykeluthyrning"
               className="w-full rounded-[10px] bg-white px-3.5 py-2.5 text-[12px] font-medium text-stone-800 ring-1 ring-stone-200/60 placeholder:text-stone-300 focus:outline-none focus:ring-2"
               style={
                 {
@@ -311,7 +327,7 @@ export default function PlacesManager({ campground, places }: Props) {
               type="text"
               value={newAddress}
               onChange={(e) => setNewAddress(e.target.value)}
-              placeholder="Adress (Krävs om inte platsen ligger på området)"
+              placeholder="Adress (krävs om inte på området)"
               className="w-full rounded-[10px] bg-white px-3.5 py-2.5 text-[12px] font-medium text-stone-800 ring-1 ring-stone-200/60 placeholder:text-stone-300 focus:outline-none focus:ring-2"
               style={
                 {
@@ -321,30 +337,35 @@ export default function PlacesManager({ campground, places }: Props) {
             />
 
             {/* Category selector */}
-            <div className="flex flex-wrap gap-1">
-              {ALL_CATEGORIES.map((cat) => {
-                const m = CATEGORY_META[cat];
-                const isActive = newCategory === cat;
-                return (
-                  <button
-                    key={cat}
-                    onClick={() => setNewCategory(cat)}
-                    className="flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.1em] transition-all active:scale-95"
-                    style={
-                      isActive
-                        ? { backgroundColor: brand, color: "#fff" }
-                        : {
-                            backgroundColor: "white",
-                            color: "#78716c",
-                            boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.06)",
-                          }
-                    }
-                  >
-                    <span className="text-xs">{m.emoji}</span>
-                    {m.label}
-                  </button>
-                );
-              })}
+            <div>
+              <label className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.2em] text-stone-400">
+                Kategori
+              </label>
+              <div className="flex flex-wrap gap-1">
+                {ALL_CATEGORIES.map((cat) => {
+                  const m = CATEGORY_META[cat];
+                  const isActive = newCategory === cat;
+                  return (
+                    <button
+                      key={cat}
+                      onClick={() => setNewCategory(cat)}
+                      className="flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.1em] transition-all active:scale-95"
+                      style={
+                        isActive
+                          ? { backgroundColor: brand, color: "#fff" }
+                          : {
+                              backgroundColor: "white",
+                              color: "#78716c",
+                              boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.06)",
+                            }
+                      }
+                    >
+                      <span className="text-xs">{m.emoji}</span>
+                      {m.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {/* On-site toggle */}
@@ -371,18 +392,35 @@ export default function PlacesManager({ campground, places }: Props) {
                     Gäster behöver inte köra — nås till fots
                   </p>
                 </div>
+                <ToggleSwitch active={newIsOnSite} brand={brand} />
+              </button>
+            </div>
+
+            {/* Indoor toggle */}
+            <div className="rounded-[10px] bg-white p-3 ring-1 ring-stone-200/60">
+              <button
+                onClick={() => setNewIsIndoor(!newIsIndoor)}
+                className="flex w-full items-center gap-3"
+              >
                 <div
-                  className={`h-5 w-9 rounded-full p-0.5 transition-colors ${
-                    newIsOnSite ? "" : "bg-stone-200"
-                  }`}
-                  style={newIsOnSite ? { backgroundColor: brand } : undefined}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] transition-colors"
+                  style={
+                    newIsIndoor
+                      ? { backgroundColor: hexToRgba(brand, 0.1), color: brand }
+                      : { backgroundColor: "#f5f5f4", color: "#a8a29e" }
+                  }
                 >
-                  <div
-                    className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
-                      newIsOnSite ? "translate-x-4" : "translate-x-0"
-                    }`}
-                  />
+                  <Umbrella size={14} strokeWidth={2} />
                 </div>
+                <div className="flex-1 text-left">
+                  <p className="text-[11px] font-bold text-stone-700">
+                    Inomhusaktivitet
+                  </p>
+                  <p className="text-[9px] text-stone-400">
+                    Bra vid regn — AI-planeraren föreslår detta vid dåligt väder
+                  </p>
+                </div>
+                <ToggleSwitch active={newIsIndoor} brand={brand} />
               </button>
             </div>
 
@@ -438,9 +476,9 @@ export default function PlacesManager({ campground, places }: Props) {
               </button>
 
               {!isAddFormValid && newName.trim() !== "" && (
-                <p className="text-center text-[10px] text-red-500 font-medium">
-                  Platsen måste ha en adress eller vara markerad som "På
-                  campingområdet".
+                <p className="text-center text-[10px] font-medium text-red-500">
+                  Platsen måste ha en adress eller vara markerad som &ldquo;På
+                  campingområdet&rdquo;.
                 </p>
               )}
             </div>
@@ -450,7 +488,6 @@ export default function PlacesManager({ campground, places }: Props) {
 
       {/* ━━━ PLACES LIST ━━━ */}
       <div>
-        {/* List header */}
         <div className="mb-2 px-1">
           <p className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-300">
             {filtered.length} {filtered.length === 1 ? "plats" : "platser"}
@@ -476,11 +513,7 @@ export default function PlacesManager({ campground, places }: Props) {
                 <div
                   key={place.id}
                   className={`rounded-[14px] p-3.5 ring-1 ring-stone-200/60 transition-all ${
-                    place.is_hidden
-                      ? "bg-stone-50/60 opacity-50"
-                      : place.is_pinned
-                        ? "bg-white"
-                        : "bg-white"
+                    place.is_hidden ? "bg-stone-50/60 opacity-50" : "bg-white"
                   } ${busy ? "opacity-40" : ""}`}
                   style={
                     place.is_pinned
@@ -504,7 +537,7 @@ export default function PlacesManager({ campground, places }: Props) {
                         </h4>
                         {place.is_pinned && (
                           <StatusBadge
-                            label="Pinnad"
+                            label="⭐ Pinnad"
                             bgColor={hexToRgba(brand, 0.06)}
                             textColor={brand}
                           />
@@ -528,6 +561,13 @@ export default function PlacesManager({ campground, places }: Props) {
                             label="På området"
                             bgColor="rgba(16,185,129,0.08)"
                             textColor="#059669"
+                          />
+                        )}
+                        {place.is_indoor && (
+                          <StatusBadge
+                            label="Inomhus"
+                            bgColor="rgba(99,102,241,0.08)"
+                            textColor="#4f46e5"
                           />
                         )}
                       </div>
@@ -686,7 +726,7 @@ export default function PlacesManager({ campground, places }: Props) {
                     </div>
                   )}
 
-                  {/* Details editor (hours + on-site) */}
+                  {/* Details editor */}
                   {editingDetails && (
                     <div className="mt-3 space-y-2.5 rounded-[10px] bg-stone-50/80 p-3 pl-11">
                       {/* On-site toggle */}
@@ -712,22 +752,36 @@ export default function PlacesManager({ campground, places }: Props) {
                             På campingområdet
                           </p>
                         </div>
+                        <ToggleSwitch active={editIsOnSite} brand={brand} />
+                      </button>
+
+                      {/* Indoor toggle */}
+                      <button
+                        onClick={() => setEditIsIndoor(!editIsIndoor)}
+                        className="flex w-full items-center gap-3 rounded-[8px] bg-white p-2.5 ring-1 ring-stone-200/60"
+                      >
                         <div
-                          className={`h-5 w-9 rounded-full p-0.5 transition-colors ${
-                            editIsOnSite ? "" : "bg-stone-200"
-                          }`}
+                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] transition-colors"
                           style={
-                            editIsOnSite
-                              ? { backgroundColor: brand }
-                              : undefined
+                            editIsIndoor
+                              ? {
+                                  backgroundColor: hexToRgba(brand, 0.1),
+                                  color: brand,
+                                }
+                              : { backgroundColor: "#f5f5f4", color: "#a8a29e" }
                           }
                         >
-                          <div
-                            className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
-                              editIsOnSite ? "translate-x-4" : "translate-x-0"
-                            }`}
-                          />
+                          <Umbrella size={12} strokeWidth={2} />
                         </div>
+                        <div className="flex-1 text-left">
+                          <p className="text-[10px] font-bold text-stone-700">
+                            Inomhusaktivitet
+                          </p>
+                          <p className="text-[9px] text-stone-400">
+                            Föreslås vid regn av AI-planeraren
+                          </p>
+                        </div>
+                        <ToggleSwitch active={editIsIndoor} brand={brand} />
                       </button>
 
                       {/* Hours input */}
@@ -749,12 +803,12 @@ export default function PlacesManager({ campground, places }: Props) {
                         />
                       </div>
 
-                      {/* Save button and validation message */}
+                      {/* Save */}
                       <div className="flex flex-col gap-2 pt-1">
                         {!isEditDetailsValid && (
-                          <p className="text-right text-[9px] text-red-500 font-medium">
-                            Eftersom platsen saknar adress måste den vara "På
-                            campingområdet".
+                          <p className="text-right text-[9px] font-medium text-red-500">
+                            Eftersom platsen saknar adress måste den vara
+                            &ldquo;På campingområdet&rdquo;.
                           </p>
                         )}
                         <div className="flex justify-end gap-2">
@@ -811,6 +865,20 @@ export default function PlacesManager({ campground, places }: Props) {
 /* ═══════════════════════════════════════════════════════
    Internal Sub-Components
    ═══════════════════════════════════════════════════════ */
+
+function ToggleSwitch({ active, brand }: { active: boolean; brand: string }) {
+  return (
+    <div
+      className="h-5 w-9 shrink-0 rounded-full p-0.5 transition-colors"
+      style={{ backgroundColor: active ? brand : "#d6d3d1" }}
+    >
+      <div
+        className="h-4 w-4 rounded-full bg-white shadow-sm transition-transform"
+        style={{ transform: active ? "translateX(16px)" : "translateX(0)" }}
+      />
+    </div>
+  );
+}
 
 function StatusBadge({
   label,

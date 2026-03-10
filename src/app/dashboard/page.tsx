@@ -3,6 +3,7 @@ import type {
   Announcement,
   CachedPlace,
   Campground,
+  InternalLocation,
   PromotedPartner,
   PromotedPartnerWithClicks,
 } from "@/types/database";
@@ -19,6 +20,8 @@ import {
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { logout } from "./actions";
+import AnalyticsDashboard from "./AnalyticsDashboard";
+import FacilityManager from "./FacilityManager";
 import PartnerManager from "./PartnerManager";
 import PlacesManager from "./places/PlacesManager";
 import SettingsForm from "./settings/SettingsForm";
@@ -123,7 +126,14 @@ export default async function DashboardPage() {
       }
     }
   }
-
+  // 6. Facilities
+  const { data: facilitiesRaw } = await supabase
+    .from("internal_locations")
+    .select("*")
+    .eq("campground_id", campground.id)
+    .order("walking_minutes", { ascending: true });
+  const facilities: InternalLocation[] = (facilitiesRaw ||
+    []) as InternalLocation[];
   const placeNameMap: Record<string, string> = {};
   for (const p of places) {
     placeNameMap[p.id] = p.name;
@@ -354,7 +364,9 @@ export default async function DashboardPage() {
             </div>
           </Link>
         </section>
-
+        <section className="mx-auto max-w-7xl px-4 pt-4 sm:px-6">
+          <AnalyticsDashboard campgroundId={campground.id} brand={brand} />
+        </section>
         {/* MAIN */}
         <main className="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-7">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-5">
@@ -399,6 +411,22 @@ export default async function DashboardPage() {
                   places={places}
                 />
               </div>
+            </div>
+          </div>
+          {/* FACILITIES */}
+          <div className="mt-4 space-y-3">
+            <SectionHead
+              icon={<MapPin size={14} strokeWidth={2} />}
+              title="Faciliteter"
+              subtitle="Toaletter, duschar & service på campingen"
+              brand={brand}
+            />
+            <div className="rounded-[20px] bg-white p-5 ring-1 ring-stone-200/60 sm:p-6">
+              <FacilityManager
+                campgroundId={campground.id}
+                facilities={facilities}
+                brand={brand}
+              />
             </div>
           </div>
         </main>

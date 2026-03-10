@@ -1,10 +1,28 @@
+// src/lib/weather.ts
+
 export interface WeatherData {
   temp: number;
   description: string;
   isRaining: boolean;
   icon: string;
-  windSpeed: number; // Added this
+  windSpeed: number;
 }
+
+// ── SMHI response shape ──────────────────────────────────
+interface SMHIParameter {
+  name: string;
+  values: number[];
+}
+
+interface SMHITimeSeries {
+  validTime: string;
+  parameters: SMHIParameter[];
+}
+
+interface SMHIResponse {
+  timeSeries?: SMHITimeSeries[];
+}
+// ─────────────────────────────────────────────────────────
 
 export async function getCurrentWeather(
   lat: number,
@@ -18,28 +36,20 @@ export async function getCurrentWeather(
     const res = await fetch(url, { next: { revalidate: 900 } });
     if (!res.ok) return null;
 
-    const data = await res.json();
+    const data = (await res.json()) as SMHIResponse; // ← cast here
     const now = new Date();
 
-    /**
-     * FIX 1: FIND CURRENT HOUR
-     * We look through the timeSeries for the entry closest to "now".
-     * This prevents the "Overcast" vs "Fog" mismatch you are seeing.
-     */
     const current =
-      data.timeSeries?.find((ts: any) => {
+      data.timeSeries?.find((ts) => {
         const validTime = new Date(ts.validTime);
-        return Math.abs(validTime.getTime() - now.getTime()) < 1800000; // 30 min window
+        return Math.abs(validTime.getTime() - now.getTime()) < 1800000;
       }) || data.timeSeries?.[0];
 
     if (!current) return null;
 
-    // FIX 2: GET WIND SPEED ("ws")
-    const tempParam = current.parameters.find((p: any) => p.name === "t");
-    const symbolParam = current.parameters.find(
-      (p: any) => p.name === "Wsymb2",
-    );
-    const windParam = current.parameters.find((p: any) => p.name === "ws"); // Wind Speed
+    const tempParam = current.parameters.find((p) => p.name === "t");
+    const symbolParam = current.parameters.find((p) => p.name === "Wsymb2");
+    const windParam = current.parameters.find((p) => p.name === "ws");
 
     if (!tempParam || !symbolParam) return null;
 
@@ -50,12 +60,11 @@ export async function getCurrentWeather(
     const { description, isRaining, emoji } = parseSmhiSymbol(symbolCode);
 
     return {
-      // FIX 3: MATCH SMHI ROUNDING
       temp: Math.floor(temp),
       description,
       isRaining,
       icon: emoji,
-      windSpeed: windSpeed,
+      windSpeed,
     };
   } catch (error) {
     console.error("Failed to fetch SMHI weather:", error);
@@ -64,58 +73,38 @@ export async function getCurrentWeather(
 }
 
 function parseSmhiSymbol(code: number) {
-  let descriptionKey = "cloudy";
-  let isRaining = false;
-  let emoji = "☁️";
+  const map: Record<
+    number,
+    { description: string; isRaining: boolean; emoji: string }
+  > = {
+    1: { description: "clear", isRaining: false, emoji: "☀️" },
+    2: { description: "nearly_clear", isRaining: false, emoji: "🌤️" },
+    3: { description: "half_clear", isRaining: false, emoji: "⛅" },
+    4: { description: "half_clear", isRaining: false, emoji: "⛅" },
+    5: { description: "cloudy", isRaining: false, emoji: "🌥️" },
+    6: { description: "overcast", isRaining: false, emoji: "☁️" },
+    7: { description: "fog", isRaining: false, emoji: "🌫️" },
+    8: { description: "light_rain", isRaining: true, emoji: "🌦️" },
+    9: { description: "rain", isRaining: true, emoji: "🌧️" },
+    10: { description: "heavy_rain", isRaining: true, emoji: "⛈️" },
+    11: { description: "thunderstorm", isRaining: true, emoji: "⛈️" },
+    12: { description: "light_sleet", isRaining: true, emoji: "🌨️" },
+    13: { description: "sleet", isRaining: true, emoji: "🌨️" },
+    14: { description: "heavy_sleet", isRaining: true, emoji: "🌨️" },
+    15: { description: "light_snow", isRaining: false, emoji: "🌨️" },
+    16: { description: "snow", isRaining: false, emoji: "❄️" },
+    17: { description: "heavy_snow", isRaining: false, emoji: "❄️" },
+    18: { description: "light_rain", isRaining: true, emoji: "⛈️" },
+    19: { description: "rain", isRaining: true, emoji: "⛈️" },
+    20: { description: "heavy_rain", isRaining: true, emoji: "⛈️" },
+    21: { description: "light_sleet", isRaining: true, emoji: "⛈️" },
+    22: { description: "sleet", isRaining: true, emoji: "⛈️" },
+    23: { description: "heavy_sleet", isRaining: true, emoji: "⛈️" },
+    24: { description: "light_snow", isRaining: false, emoji: "⛈️" },
+    25: { description: "snow", isRaining: false, emoji: "⛈️" },
+    26: { description: "heavy_snow", isRaining: false, emoji: "⛈️" },
+    27: { description: "thunderstorm", isRaining: true, emoji: "⛈️" },
+  };
 
-  switch (code) {
-    case 1:
-      descriptionKey = "clear";
-      emoji = "☀️";
-      break;
-    case 2:
-      descriptionKey = "nearly_clear";
-      emoji = "🌤️";
-      break;
-    case 3:
-      descriptionKey = "half_clear";
-      emoji = "⛅";
-      break;
-    case 4:
-      descriptionKey = "half_clear";
-      emoji = "⛅";
-      break;
-    case 5:
-      descriptionKey = "cloudy";
-      emoji = "🌥️";
-      break;
-    case 6:
-      descriptionKey = "overcast";
-      emoji = "☁️";
-      break;
-    case 7:
-      descriptionKey = "fog";
-      emoji = "🌫️";
-      break; // This matches your JSON
-    case 8:
-      descriptionKey = "light_rain";
-      emoji = "🌦️";
-      isRaining = true;
-      break;
-    case 9:
-      descriptionKey = "rain";
-      emoji = "🌧️";
-      isRaining = true;
-      break;
-    case 10:
-      descriptionKey = "heavy_rain";
-      emoji = "⛈️";
-      isRaining = true;
-      break;
-    // ... all other cases stay the same
-    default:
-      break;
-  }
-
-  return { description: descriptionKey, isRaining, emoji };
+  return map[code] ?? { description: "cloudy", isRaining: false, emoji: "☁️" };
 }

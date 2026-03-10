@@ -1,11 +1,11 @@
 "use server";
-
 import { getTodaysOpeningHours } from "@/lib/place-utils";
 import type { CachedPlace, Campground, PlaceCategory } from "@/types/database";
+// depending on your setup
 
 // ─── Types ──────────────────────────────────────────────
 
-export type PlanLang = "sv" | "en" | "de" | "da";
+export type PlanLang = "sv" | "en" | "de" | "da" | "nl" | "no";
 type Period = "morning" | "lunch" | "afternoon" | "evening";
 
 export interface ItineraryItem {
@@ -19,11 +19,6 @@ export interface ItineraryItem {
 }
 
 // ─── Timezone helpers ───────────────────────────────────
-//
-// All campgrounds use SMHI (Swedish weather) → all are in Sweden.
-// On Cloudflare Workers, `Date` uses UTC. Every time calculation
-// must go through these helpers to avoid off-by-one-hour / wrong-
-// day bugs that silently corrupt plans.
 
 const TIMEZONE = "Europe/Stockholm";
 
@@ -53,12 +48,13 @@ function swedishMonth(): number {
   return nowInSweden().getMonth();
 }
 
-// ─── Cache ──────────────────────────────────────────────
+// ─── KV-backed cache ───────────────────────────────────
 //
-// ⚠️  CLOUDFLARE: In-memory Maps do NOT survive across
-// Worker invocations. For production, swap the backing store
-// to Cloudflare KV, D1, or a Supabase cache table.
-// The pattern (base + translated, in-flight dedup) stays the same.
+// L1 = in-memory Map  (within a single Worker invocation)
+// L2 = Cloudflare KV  (survives across invocations)
+//
+// Read:  L1 → L2 → miss
+// Write: L1 + L2
 
 interface CachedPlan {
   plan: ItineraryItem[];
@@ -66,9 +62,83 @@ interface CachedPlan {
   dateStr: string;
   weatherKey: string;
 }
+interface GeminiResponse {
+  candidates?: {
+    content?: {
+      parts?: { text?: string }[];
+    };
+    finishReason?: string;
+  }[];
+  error?: { message: string };
+}
+/** L1: in-memory, lives only for the current invocation */
+const l1 = new Map<string, CachedPlan>();
 
-const planCache = new Map<string, CachedPlan>();
-const CACHE_TTL = 24 * 60 * 60 * 1000; // 4 h — plans go stale faster than 24 h
+const CACHE_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
+const CACHE_TTL_S = 4 * 60 * 60; // same in seconds for KV
+function getKV(): KVNamespace | null {
+  return null;
+}
+async function cacheGet(key: string): Promise<CachedPlan | null> {
+  const date = todayStr();
+
+  // ── L1 ──
+  const mem = l1.get(key);
+  if (
+    mem &&
+    mem.dateStr === date &&
+    Date.now() - mem.timestamp < CACHE_TTL_MS
+  ) {
+    return mem;
+  }
+
+  // ── L2: KV ──
+  const kv = await getKV();
+  if (!kv) return null;
+
+  try {
+    const stored = await kv.get<CachedPlan>(key, "json");
+    if (
+      stored &&
+      stored.dateStr === date &&
+      Date.now() - stored.timestamp < CACHE_TTL_MS
+    ) {
+      l1.set(key, stored); // promote to L1
+      return stored;
+    }
+  } catch (e) {
+    console.warn("[AI Planner] KV read error:", e);
+  }
+
+  return null;
+}
+
+async function cacheSet(key: string, entry: CachedPlan): Promise<void> {
+  l1.set(key, entry); // L1
+
+  const kv = await getKV(); // ← was missing `await`
+  if (!kv) return;
+
+  try {
+    await kv.put(key, JSON.stringify(entry), {
+      expirationTtl: CACHE_TTL_S,
+    });
+  } catch (e) {
+    console.warn("[AI Planner] KV write error:", e);
+  }
+}
+
+/** Prune L1 only — KV handles its own TTL */
+function pruneL1() {
+  if (l1.size < 50) return;
+  const today = todayStr();
+  const now = Date.now();
+  for (const [k, v] of l1) {
+    if (v.dateStr !== today || now - v.timestamp > CACHE_TTL_MS) l1.delete(k);
+  }
+}
+
+// ── In-flight dedup (only useful within a single invocation) ──
 
 const inflightGenerations = new Map<string, Promise<ItineraryItem[]>>();
 const inflightTranslations = new Map<string, Promise<ItineraryItem[]>>();
@@ -93,25 +163,7 @@ function mkTranslatedCacheKey(
   return `tr|${campId}|${date}|${wb}|${lang}`;
 }
 
-let lastPruneTime = 0;
-
-function pruneCache() {
-  const now = Date.now();
-  if (now - lastPruneTime < 60_000 && planCache.size < 200) return;
-  lastPruneTime = now;
-  const today = todayStr();
-  for (const [k, v] of planCache) {
-    if (v.dateStr !== today || now - v.timestamp > CACHE_TTL)
-      planCache.delete(k);
-  }
-}
-
 // ─── Distance helpers ───────────────────────────────────
-//
-// Prefer the pre-computed `road_distance_km` column (OSRM)
-// that already lives on CachedPlace.  Fall back to the
-// distanceMap string (formatted like "3.5 km" / "350 m"),
-// then to 999 km (= "unknown, treat as far").
 
 function getPlaceDistanceKm(
   place: CachedPlace,
@@ -149,7 +201,7 @@ function formatDistanceForDisplay(km: number): string {
 // ─── Opening-hours parsing ──────────────────────────────
 
 interface TimeRange {
-  open: number; // decimal hours, 9.5 = 09:30
+  open: number;
   close: number;
 }
 
@@ -161,7 +213,6 @@ function parseTimeRange(text: string): TimeRange | null {
 
   if (/closed|stängt|geschlossen|lukket/i.test(text)) return null;
 
-  // 24 h format: "09:00 – 17:30"
   let m = text.match(/(\d{1,2})[.:](\d{2})\s*[-–—]\s*(\d{1,2})[.:](\d{2})/);
   if (m) {
     return {
@@ -170,7 +221,6 @@ function parseTimeRange(text: string): TimeRange | null {
     };
   }
 
-  // 12 h format: "9:00 AM – 5:00 PM"
   m = text.match(
     /(\d{1,2}):?(\d{2})?\s*(AM|PM)\s*[-–—]\s*(\d{1,2}):?(\d{2})?\s*(AM|PM)/i,
   );
@@ -211,10 +261,6 @@ function getPlaceHours(place: CachedPlace): {
   return { isClosedToday: isClosed, text: data.text, range };
 }
 
-/**
- * Can the guest arrive during [slotStart, slotEnd) and spend at
- * least `minMinutes` inside the place before it closes?
- */
 function isViableForSlot(
   place: CachedPlace,
   slotStart: number,
@@ -223,7 +269,7 @@ function isViableForSlot(
 ): boolean {
   const h = getPlaceHours(place);
   if (h.isClosedToday) return false;
-  if (!h.range) return true; // unknown hours → benefit of the doubt
+  if (!h.range) return true;
 
   const overlapStart = Math.max(slotStart, h.range.open);
   const overlapEnd = Math.min(slotEnd, h.range.close);
@@ -249,9 +295,9 @@ function formatHoursForPrompt(place: CachedPlace): string {
 
 interface SlotDef {
   period: Period;
-  start: number; // earliest suggested arrival
-  end: number; // latest suggested arrival
-  minDuration: number; // minimum useful minutes at venue
+  start: number;
+  end: number;
+  minDuration: number;
 }
 
 const SLOT_DEFS: Record<Period, SlotDef> = {
@@ -306,6 +352,24 @@ function getDayCtx(lang: PlanLang): DayContext {
       "fredag",
       "lørdag",
     ],
+    nl: [
+      "zondag",
+      "maandag",
+      "dinsdag",
+      "woensdag",
+      "donderdag",
+      "vrijdag",
+      "zaterdag",
+    ],
+    no: [
+      "søndag",
+      "mandag",
+      "tirsdag",
+      "onsdag",
+      "torsdag",
+      "fredag",
+      "lørdag",
+    ],
   };
 
   const season: DayContext["season"] =
@@ -328,9 +392,6 @@ function getDayCtx(lang: PlanLang): DayContext {
 }
 
 // ─── Weather description mapping ────────────────────────
-//
-// SMHI returns description *keys* ("clear", "rain", …),
-// not human-readable text.
 
 const WEATHER_LABELS: Record<string, string> = {
   clear: "clear skies",
@@ -361,10 +422,13 @@ const CATEGORY_EMOJI: Record<PlaceCategory, string> = {
   swimming: "🏊",
   spa: "🧖",
   cinema: "🎬",
-  other: "🎯",
+  activity: "🎯",
+  playground: "🛝",
+  sports: "🏸",
+  attraction: "🎡",
+  other: "⭐",
 };
 
-/** Indoor-friendly categories for rainy / cold weather. */
 const INDOOR_CATS: PlaceCategory[] = [
   "museum",
   "shopping",
@@ -407,7 +471,6 @@ function scorePlaces(
           ? formatDistanceForDisplay(km)
           : (dm[p.id] ?? "");
 
-      // ── Distance ──
       if (p.is_on_site) s += 45;
       else if (km < 2) s += 40;
       else if (km < 5) s += 30;
@@ -417,7 +480,6 @@ function scorePlaces(
 
       if (p.is_pinned) s += 50;
 
-      // ── Rating ──
       if (p.rating) {
         if (p.rating >= 4.5) s += 25;
         else if (p.rating >= 4.0) s += 15;
@@ -425,7 +487,6 @@ function scorePlaces(
         else if (p.rating < 3.0) s -= 15;
       }
 
-      // ── Weather ──
       if (rain) {
         if (p.is_indoor) s += 30;
         if (["beach", "park"].includes(p.category)) s -= 35;
@@ -437,24 +498,20 @@ function scorePlaces(
         if (temp < 10 && !p.is_indoor) s -= 10;
       }
 
-      // ── Wind ──
       if (highWind && !p.is_indoor) {
         s -= 15;
         if (p.category === "beach") s -= 10;
       }
 
-      // ── Weekend leisure bonus ──
       if (
         isWeekend &&
         ["restaurant", "cafe", "shopping", "cinema"].includes(p.category)
       )
         s += 8;
 
-      // ── Opening hours ──
       const hours = getPlaceHours(p);
       if (hours.isClosedToday) s -= 200;
 
-      // ── Daily-variety seed ──
       const dn = parseInt(todayStr().replace(/-/g, ""), 10);
       const ih = p.id.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
       s += ((dn + ih) % 13) - 6;
@@ -469,11 +526,11 @@ function scorePlaces(
         range: hours.range,
       };
     })
-    .filter((s) => !s.isClosedToday) // hard-remove closed places
+    .filter((s) => !s.isClosedToday)
     .sort((a, b) => b.score - a.score);
 }
 
-// ─── Selection (time-slot & diversity aware) ────────────
+// ─── Selection ──────────────────────────────────────────
 
 function selectPlaces(
   scored: Scored[],
@@ -485,10 +542,6 @@ function selectPlaces(
   const usedCategories: PlaceCategory[] = [];
   const highWind = wind >= 10;
 
-  /**
-   * Returns `true` when a viable alternative with a different
-   * category exists among the remaining candidates for `period`.
-   */
   const hasDiverseAlternative = (
     currentCat: PlaceCategory,
     cats: PlaceCategory[],
@@ -520,8 +573,6 @@ function selectPlaces(
       if (!isViableForSlot(c.place, slot.start, slot.end, slot.minDuration))
         continue;
 
-      // Diversity: skip if the same category was used in the last 3 picks
-      // AND a viable alternative category exists.
       const recentSame = usedCategories
         .slice(-3)
         .filter((cat) => cat === c.place.category).length;
@@ -559,7 +610,6 @@ function selectPlaces(
     return null;
   };
 
-  // ── Morning ──
   const morning: Scored[] = [];
   if (!rain && temp > 18 && !highWind)
     morning.push(...pickFor("morning", ["beach", "park"], { maxKm: 15 }));
@@ -567,26 +617,39 @@ function selectPlaces(
     morning.push(...pickFor("morning", INDOOR_CATS, { indoor: true }));
   else if (temp < 10)
     morning.push(
-      ...pickFor("morning", ["museum", "cafe", "cinema"], { maxKm: 20 }),
+      ...pickFor(
+        "morning",
+        ["museum", "cafe", "cinema", "activity", "attraction"],
+        { maxKm: 20 },
+      ),
     );
   else morning.push(...pickFor("morning", ["park"], { maxKm: 20 }));
-
   morning.push(...pickFor("morning", ["cafe"], { maxKm: 10 }));
 
-  // ── Lunch ──
   const lunch: Scored[] = [];
   lunch.push(...pickFor("lunch", ["restaurant"]));
   if (!lunch.length) lunch.push(...pickFor("lunch", ["cafe"]));
 
-  // ── Afternoon ──
   const afternoon: Scored[] = [];
   if (!rain && temp > 20 && !highWind)
     afternoon.push(...pickFor("afternoon", ["beach"], { maxKm: 15 }));
 
   const aCats: PlaceCategory[] = rain
-    ? ["bowling", "swimming", "spa", "museum", "shopping", "cinema"]
+    ? [
+        "bowling",
+        "swimming",
+        "spa",
+        "museum",
+        "shopping",
+        "cinema",
+        "activity",
+        "attraction",
+      ]
     : [
-        "other",
+        "activity",
+        "attraction",
+        "sports",
+        "playground",
         "bowling",
         "swimming",
         "spa",
@@ -594,6 +657,7 @@ function selectPlaces(
         "park",
         "shopping",
         "cinema",
+        "other",
       ];
   afternoon.push(...pickFor("afternoon", aCats, { count: 2 }));
 
@@ -605,12 +669,10 @@ function selectPlaces(
     if (a) afternoon.push(a);
   }
 
-  // ── Evening ──
   const evening: Scored[] = [];
   evening.push(...pickFor("evening", ["restaurant"]));
   if (!evening.length) evening.push(...pickFor("evening", ["cafe"]));
 
-  // ── Extras ──
   const extras: Scored[] = [];
   for (let i = 0; i < 3; i++) {
     const e = pickAnyFor("afternoon", { maxKm: 25 });
@@ -633,7 +695,7 @@ function sanitizeForPrompt(text: string | null | undefined): string {
     .slice(0, 100);
 }
 
-// ─── Build prompt (always English) ──────────────────────
+// ─── Build prompt ───────────────────────────────────────
 
 function buildPrompt(
   campground: Campground,
@@ -855,11 +917,6 @@ function parseItems(raw: string): ItineraryItem[] | null {
 }
 
 // ─── Post-validation ────────────────────────────────────
-//
-// After Gemini returns a plan, verify every suggested time
-// actually falls within the place's opening hours.  If not,
-// shift the time to the nearest valid window or drop the
-// placeId so the item stays but loses its link.
 
 function postValidatePlan(
   plan: ItineraryItem[],
@@ -872,19 +929,17 @@ function postValidatePlan(
     if (!place) return { ...item, placeId: undefined };
 
     const hours = getPlaceHours(place);
-    if (hours.isClosedToday) return { ...item, placeId: undefined }; // shouldn't happen but guard
-    if (!hours.range) return item; // unknown → trust generation
+    if (hours.isClosedToday) return { ...item, placeId: undefined };
+    if (!hours.range) return item;
 
     const timeParts = item.time.match(/^(\d{1,2}):(\d{2})$/);
     if (!timeParts) return item;
 
     const suggested = parseInt(timeParts[1]) + parseInt(timeParts[2]) / 60;
 
-    // 15 min buffer before closing so the visit is meaningful
     if (suggested >= hours.range.open && suggested < hours.range.close - 0.25)
-      return item; // fine
+      return item;
 
-    // Try to adjust within the same period slot
     const slot = SLOT_DEFS[item.period];
     const validStart = Math.max(slot.start, hours.range.open);
     const validEnd = Math.min(slot.end, hours.range.close - 0.25);
@@ -892,9 +947,7 @@ function postValidatePlan(
     if (validStart < validEnd) {
       const h = Math.floor(validStart);
       const m = Math.round((validStart - h) * 60);
-      const adjusted = `${h.toString().padStart(2, "0")}:${m
-        .toString()
-        .padStart(2, "0")}`;
+      const adjusted = `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
       console.log(
         `[AI Planner] Adjusted time for "${place.name}": ${item.time} → ${adjusted}`,
       );
@@ -908,15 +961,11 @@ function postValidatePlan(
   });
 }
 
-// ─── Template fallback (always English) ─────────────────
+// ─── Template fallback ──────────────────────────────────
 
 function fallback(
   sel: ReturnType<typeof selectPlaces>,
-  weather: {
-    temp: number;
-    isRaining: boolean;
-    windSpeed?: number;
-  } | null,
+  weather: { temp: number; isRaining: boolean; windSpeed?: number } | null,
   day: DayContext,
 ): ItineraryItem[] {
   const items: ItineraryItem[] = [];
@@ -932,7 +981,6 @@ function fallback(
         ? "Bundle up! "
         : "";
 
-  // ── Morning ──
   if (sel.morning[0]) {
     const p = sel.morning[0];
     const loc = p.place.is_on_site ? ", right here at camp" : "";
@@ -959,7 +1007,6 @@ function fallback(
     });
   }
 
-  // ── Lunch ──
   if (sel.lunch[0]) {
     const p = sel.lunch[0];
     items.push({
@@ -983,7 +1030,6 @@ function fallback(
     });
   }
 
-  // ── Afternoon ──
   for (const [i, p] of sel.afternoon.slice(0, 2).entries()) {
     items.push({
       time: i === 0 ? "14:30" : "16:00",
@@ -996,7 +1042,6 @@ function fallback(
     });
   }
 
-  // ── Dinner ──
   if (sel.evening[0]) {
     const p = sel.evening[0];
     items.push({
@@ -1010,13 +1055,11 @@ function fallback(
     });
   }
 
-  // ── Evening at camp — varied by weather + season + day ──
   interface EveningOption {
     emoji: string;
     title: string;
     description: string;
   }
-
   const opts: EveningOption[] = [];
   if (!rain && temp > 15) {
     opts.push({
@@ -1103,14 +1146,8 @@ async function callGemini(
           responseMimeType: "application/json",
         },
         safetySettings: [
-          {
-            category: "HARM_CATEGORY_HARASSMENT",
-            threshold: "BLOCK_NONE",
-          },
-          {
-            category: "HARM_CATEGORY_HATE_SPEECH",
-            threshold: "BLOCK_NONE",
-          },
+          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
           {
             category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
             threshold: "BLOCK_NONE",
@@ -1126,25 +1163,20 @@ async function callGemini(
     if (!res.ok) {
       const status = res.status;
       console.error(`[AI Planner] HTTP ${status}`);
-
-      // Rate-limited → exponential back-off (up to 3 tries)
       if (status === 429 && attempt < 3) {
         const delay = Math.min(1000 * 2 ** attempt, 8000);
         console.warn(`[AI Planner] Rate limited, retry in ${delay}ms`);
         await new Promise((r) => setTimeout(r, delay));
         return callGemini(prompt, attempt + 1);
       }
-
-      // Server error → one quick retry
       if (status >= 500 && attempt < 2) {
         await new Promise((r) => setTimeout(r, 500));
         return callGemini(prompt, attempt + 1);
       }
-
       return null;
     }
 
-    const data = await res.json();
+    const data = (await res.json()) as GeminiResponse;
     const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) {
       if (data?.candidates?.[0]?.finishReason === "SAFETY")
@@ -1191,6 +1223,8 @@ async function translatePlan(
     en: "English",
     de: "German",
     da: "Danish",
+    nl: "Dutch",
+    no: "Norwegian",
   };
 
   const toTranslate = plan.map((item, i) => ({
@@ -1233,14 +1267,8 @@ ${JSON.stringify(toTranslate)}`;
           responseMimeType: "application/json",
         },
         safetySettings: [
-          {
-            category: "HARM_CATEGORY_HARASSMENT",
-            threshold: "BLOCK_NONE",
-          },
-          {
-            category: "HARM_CATEGORY_HATE_SPEECH",
-            threshold: "BLOCK_NONE",
-          },
+          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
           {
             category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
             threshold: "BLOCK_NONE",
@@ -1258,7 +1286,7 @@ ${JSON.stringify(toTranslate)}`;
       return plan;
     }
 
-    const data = await res.json();
+    const data = (await res.json()) as GeminiResponse;
     const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) return plan;
 
@@ -1267,20 +1295,16 @@ ${JSON.stringify(toTranslate)}`;
     try {
       parsed = JSON.parse(cleaned);
     } catch {
-      console.error("[AI Planner] Translation JSON parse failed");
       return plan;
     }
-
     if (!Array.isArray(parsed)) return plan;
 
-    // Merge — handles partial translations gracefully
     const translated = plan.map((item, i) => {
       const tr = (parsed as unknown[])[i] as
         | Record<string, unknown>
         | undefined;
       if (!tr || typeof tr !== "object") return item;
 
-      // Try pre-translated owner note for tips
       let translatedTip = item.tip;
       if (item.placeId && item.tip) {
         const place = placesById.get(item.placeId);
@@ -1372,23 +1396,22 @@ async function generateBasePlan(
 
   const placesById = new Map(places.map((p) => [p.id, p]));
 
-  // Validate place IDs
   plan = plan.map((item) => ({
     ...item,
     placeId:
       item.placeId && placesById.has(item.placeId) ? item.placeId : undefined,
   }));
 
-  // Post-validate suggested times against real opening hours
   plan = postValidatePlan(plan, placesById);
 
-  planCache.set(baseKey, {
+  // ── Write to KV + L1 ──
+  await cacheSet(baseKey, {
     plan,
     timestamp: Date.now(),
     dateStr: date,
     weatherKey: wb,
   });
-  pruneCache();
+  pruneL1();
 
   return plan;
 }
@@ -1409,7 +1432,7 @@ export async function getAiPlan(
     | undefined,
   places: CachedPlace[],
   lang: PlanLang,
-  _currentTimeStr?: string, // reserved for future timezone override / testing
+  _currentTimeStr?: string,
   distanceMap?: Record<string, string>,
 ): Promise<ItineraryItem[]> {
   const rain = weather?.isRaining ?? false;
@@ -1422,25 +1445,15 @@ export async function getAiPlan(
   const baseKey = mkBaseCacheKey(campground.id, date, wb);
   const translatedKey = mkTranslatedCacheKey(campground.id, date, wb, lang);
 
-  // ── 1. Translated cache ───────────────────────────────
-  const cachedTranslated = planCache.get(translatedKey);
-  if (
-    cachedTranslated &&
-    cachedTranslated.dateStr === date &&
-    Date.now() - cachedTranslated.timestamp < CACHE_TTL
-  ) {
-    return cachedTranslated.plan;
-  }
+  // ── 1. Translated cache (L1 → KV) ────────────────────
+  const cachedTranslated = await cacheGet(translatedKey);
+  if (cachedTranslated) return cachedTranslated.plan;
 
   // ── 2. Base (English) plan — cache or generate ────────
   let basePlan: ItineraryItem[];
-  const cachedBase = planCache.get(baseKey);
+  const cachedBase = await cacheGet(baseKey);
 
-  if (
-    cachedBase &&
-    cachedBase.dateStr === date &&
-    Date.now() - cachedBase.timestamp < CACHE_TTL
-  ) {
+  if (cachedBase) {
     basePlan = cachedBase.plan;
   } else {
     const inflight = inflightGenerations.get(baseKey);
@@ -1483,27 +1496,30 @@ export async function getAiPlan(
     }
   }
 
-  // ── 4. Cache translated result ────────────────────────
-  planCache.set(translatedKey, {
+  // ── 4. Cache translated result (L1 + KV) ─────────────
+  await cacheSet(translatedKey, {
     plan: translatedPlan,
     timestamp: Date.now(),
     dateStr: date,
     weatherKey: wb,
   });
-  pruneCache();
+  pruneL1();
 
   return translatedPlan;
 }
-const DEFAULT_LANGS: PlanLang[] = ["sv", "en", "de", "da"];
+
+// ─── Warm-up helpers ────────────────────────────────────
+
+const DEFAULT_LANGS: PlanLang[] = ["sv", "en", "de", "da", "nl", "no"];
 
 function getSupportedLangs(campground: Campground): PlanLang[] {
-  if (campground.supported_languages?.length) {
-    return campground.supported_languages.filter((l): l is PlanLang =>
-      DEFAULT_LANGS.includes(l as PlanLang),
-    );
-  }
-  return DEFAULT_LANGS;
+  const dbLangs = (campground.supported_languages ?? []).filter(
+    (l): l is PlanLang => DEFAULT_LANGS.includes(l as PlanLang),
+  );
+  const merged = new Set<PlanLang>([...DEFAULT_LANGS, ...dbLangs]);
+  return Array.from(merged);
 }
+
 async function warmAllTranslations(
   basePlan: ItineraryItem[],
   campground: Campground,
@@ -1518,17 +1534,11 @@ async function warmAllTranslations(
     langs.map(async (lang) => {
       const key = mkTranslatedCacheKey(campground.id, date, wb, lang);
 
-      // Already cached?
-      const existing = planCache.get(key);
-      if (
-        existing &&
-        existing.dateStr === date &&
-        Date.now() - existing.timestamp < CACHE_TTL
-      ) {
-        return;
-      }
+      // Already in KV?
+      const existing = await cacheGet(key);
+      if (existing) return;
 
-      // Another call already translating this language?
+      // Another call already translating?
       const inflight = inflightTranslations.get(key);
       if (inflight) {
         await inflight;
@@ -1540,7 +1550,7 @@ async function warmAllTranslations(
       inflightTranslations.set(key, promise);
       try {
         const translated = await promise;
-        planCache.set(key, {
+        await cacheSet(key, {
           plan: translated,
           timestamp: Date.now(),
           dateStr: date,
@@ -1557,6 +1567,7 @@ async function warmAllTranslations(
   if (failed)
     console.warn(`[AI Planner] ${failed} warm-up translation(s) failed`);
 }
+
 const inflightPrefetches = new Map<string, Promise<void>>();
 
 export async function prefetchAiPlan(
@@ -1582,37 +1593,34 @@ export async function prefetchAiPlan(
   const dm = distanceMap ?? {};
   const baseKey = mkBaseCacheKey(campground.id, date, wb);
   const langs = getSupportedLangs(campground);
-  const allCached = langs.every((lang) => {
-    const key =
-      lang === "en"
-        ? baseKey
-        : mkTranslatedCacheKey(campground.id, date, wb, lang);
-    const cached = planCache.get(key);
-    return (
-      cached &&
-      cached.dateStr === date &&
-      Date.now() - cached.timestamp < CACHE_TTL
-    );
-  });
-  if (allCached) return;
+
+  // Check KV for all languages
+  const cacheChecks = await Promise.all(
+    langs.map(async (lang) => {
+      const key =
+        lang === "en"
+          ? baseKey
+          : mkTranslatedCacheKey(campground.id, date, wb, lang);
+      const cached = await cacheGet(key);
+      return !!cached;
+    }),
+  );
+  if (cacheChecks.every(Boolean)) return;
+
   const existing = inflightPrefetches.get(baseKey);
   if (existing) {
     await existing;
     return;
   }
+
   const work = (async () => {
     // 1. Base plan
     let basePlan: ItineraryItem[];
-    const cachedBase = planCache.get(baseKey);
+    const cachedBase = await cacheGet(baseKey);
 
-    if (
-      cachedBase &&
-      cachedBase.dateStr === date &&
-      Date.now() - cachedBase.timestamp < CACHE_TTL
-    ) {
+    if (cachedBase) {
       basePlan = cachedBase.plan;
     } else {
-      // Respect the generation lock (getAiPlan might be generating)
       const inflightGen = inflightGenerations.get(baseKey);
       if (inflightGen) {
         basePlan = await inflightGen;

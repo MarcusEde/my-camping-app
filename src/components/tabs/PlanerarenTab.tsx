@@ -31,14 +31,43 @@ function buildMapLink(
   lng?: number | null,
   name?: string,
 ): string | null {
-  // Use standard Google Maps Search/Direction URLs
-  if (lat && lng) {
+  if (lat && lng)
     return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
-  }
-  if (name) {
+  if (name)
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}`;
-  }
   return null;
+}
+
+function todayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/** Parse "HH:MM" → minutes since midnight */
+function getItemMinutes(time: string): number {
+  const m = time.match(/^(\d{1,2}):(\d{2})$/);
+  return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : 0;
+}
+
+/** Current minutes since midnight (browser local time) */
+function browserNowMinutes(): number {
+  const d = new Date();
+  return d.getHours() * 60 + d.getMinutes();
+}
+
+/**
+ * Time-based dimming: an item is "past" when
+ *   • the NEXT item's start time has been reached, OR
+ *   • (last item) 90 minutes after its start time.
+ *
+ * This replaces the old period-threshold approach that let
+ * an 18:30 evening item stay "current" until 23:00.
+ */
+function computeDimming(items: { time: string }[], nowMin: number): boolean[] {
+  return items.map((item, i) => {
+    const next = items[i + 1];
+    if (next) return nowMin >= getItemMinutes(next.time);
+    return nowMin > getItemMinutes(item.time) + 90;
+  });
 }
 
 const SPRING = { type: "spring" as const, stiffness: 400, damping: 28 };
@@ -127,6 +156,37 @@ const T: Record<Lang, L> = {
     earlierToday: "Tidligere i dag",
     onSite: "På området",
   },
+  nl: {
+    subtitle: "Jouw dag — gebaseerd op weer, dag & locatie",
+    morning: "Ochtend",
+    lunch: "Lunch",
+    afternoon: "Middag",
+    evening: "Avond",
+    rainNote:
+      "Gezellig weer buiten! Tips aangepast voor een fijne dag binnen 🛋️",
+    directions: "Route",
+    closed: "Gesloten",
+    openNow: "Open",
+    aiNote: "Gemaakt met AI op basis van locatie, weer & dag",
+    nowLabel: "Nu",
+    earlierToday: "Eerder vandaag",
+    onSite: "Op het terrein",
+  },
+  no: {
+    subtitle: "Dagen din — basert på vær, dag & sted",
+    morning: "Formiddag",
+    lunch: "Lunsj",
+    afternoon: "Ettermiddag",
+    evening: "Kveld",
+    rainNote: "Kosevær ute! Tipsene er tilpasset en fin dag innendørs 🛋️",
+    directions: "Veibeskrivelse",
+    closed: "Stengt",
+    openNow: "Åpent",
+    aiNote: "Laget med AI basert på sted, vær & dag",
+    nowLabel: "Nå",
+    earlierToday: "Tidligere i dag",
+    onSite: "På området",
+  },
 };
 
 /* ── period styles ───────────────────────────────────── */
@@ -161,49 +221,43 @@ const PS: Record<
   },
 };
 
-function isPast(period: string, h: number) {
-  return (
-    (period === "morning" && h >= 12) ||
-    (period === "lunch" && h >= 15) ||
-    (period === "afternoon" && h >= 18) ||
-    (period === "evening" && h >= 23)
-  );
-}
-
 function dayLabel(lang: Lang): string {
   const d = new Date().getDay();
-  const n: Record<Lang, string[]> = {
-    sv: ["Söndag", "Måndag", "Tisdag", "Onsdag", "Torsdag", "Fredag", "Lördag"],
-    en: [
-      "Sunday",
-      "Monday",
-      "Tuesday",
-      "Wednesday",
-      "Thursday",
-      "Friday",
-      "Saturday",
-    ],
-    de: [
-      "Sonntag",
-      "Montag",
-      "Dienstag",
-      "Mittwoch",
-      "Donnerstag",
-      "Freitag",
-      "Samstag",
-    ],
-    da: [
-      "Søndag",
-      "Mandag",
-      "Tirsdag",
-      "Onsdag",
-      "Torsdag",
-      "Fredag",
-      "Lørdag",
-    ],
-  };
   return n[lang][d];
 }
+
+const n: Record<Lang, string[]> = {
+  sv: ["Söndag", "Måndag", "Tisdag", "Onsdag", "Torsdag", "Fredag", "Lördag"],
+  en: [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+  ],
+  de: [
+    "Sonntag",
+    "Montag",
+    "Dienstag",
+    "Mittwoch",
+    "Donnerstag",
+    "Freitag",
+    "Samstag",
+  ],
+  da: ["Søndag", "Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag", "Lørdag"],
+  nl: [
+    "Zondag",
+    "Maandag",
+    "Dinsdag",
+    "Woensdag",
+    "Donderdag",
+    "Vrijdag",
+    "Zaterdag",
+  ],
+  no: ["Søndag", "Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag", "Lørdag"],
+};
 
 function dateLabel(lang: Lang): string {
   const d = new Date();
@@ -264,6 +318,34 @@ function dateLabel(lang: Lang): string {
       "nov",
       "dec",
     ],
+    nl: [
+      "jan",
+      "feb",
+      "mrt",
+      "apr",
+      "mei",
+      "jun",
+      "jul",
+      "aug",
+      "sep",
+      "okt",
+      "nov",
+      "dec",
+    ],
+    no: [
+      "jan",
+      "feb",
+      "mar",
+      "apr",
+      "mai",
+      "jun",
+      "jul",
+      "aug",
+      "sep",
+      "okt",
+      "nov",
+      "dec",
+    ],
   };
   return `${d.getDate()} ${m[lang][d.getMonth()]}`;
 }
@@ -291,32 +373,39 @@ export default function PlanerarenTab({
 
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<ItineraryItem[]>([]);
-  const [hour, setHour] = useState(new Date().getHours());
+  const [nowMin, setNowMin] = useState(browserNowMinutes);
 
-  // Fetch plan once on mount
+  /* ── stable fetch ── */
+  const dateKey = todayKey();
+  const fetchKey = `${campground.id}-${lang}-${dateKey}`;
+  const lastFetchKey = useRef<string | null>(null);
+  const argsRef = useRef({ campground, weather, places, distanceMap });
+  argsRef.current = { campground, weather, places, distanceMap };
+
   useEffect(() => {
-    
+    if (lastFetchKey.current === fetchKey) return;
+    lastFetchKey.current = fetchKey;
 
     setLoading(true);
-    getAiPlan(
-      campground,
-      weather ?? undefined,
-      places,
-      lang,
-      new Date().toISOString(),
-      distanceMap,
-    )
+    const {
+      campground: cg,
+      weather: w,
+      places: p,
+      distanceMap: dm,
+    } = argsRef.current;
+
+    getAiPlan(cg, w ?? undefined, p, lang, dateKey, dm)
       .then((plan) => setItems(plan))
       .catch((err) => {
         console.error("[Planner]", err);
         setItems([]);
       })
       .finally(() => setLoading(false));
-  }, [campground, weather, places, lang, distanceMap]);
+  }, [fetchKey, lang, dateKey]);
 
-  // Update hour every minute for dimming
+  /* ── tick every minute ── */
   useEffect(() => {
-    const id = setInterval(() => setHour(new Date().getHours()), 60_000);
+    const id = setInterval(() => setNowMin(browserNowMinutes()), 60_000);
     return () => clearInterval(id);
   }, []);
 
@@ -328,11 +417,9 @@ export default function PlanerarenTab({
     return buildMapLink(p.latitude, p.longitude, p.name);
   };
 
-  const enriched = items.map((item) => ({
-    ...item,
-    dimmed: isPast(item.period, hour),
-  }));
-
+  /* ── time-based dimming ── */
+  const dimFlags = computeDimming(items, nowMin);
+  const enriched = items.map((item, i) => ({ ...item, dimmed: dimFlags[i] }));
   const hasPast = enriched.some((i) => i.dimmed);
   const nowIdx = enriched.findIndex((i) => !i.dimmed);
 
@@ -455,7 +542,11 @@ export default function PlanerarenTab({
                   ? "Kein Plan verfügbar"
                   : lang === "da"
                     ? "Ingen plan tilgængelig"
-                    : "No plan available"}
+                    : lang === "no"
+                      ? "Ingen plan tilgjengelig"
+                      : lang === "nl"
+                        ? "Geen plan beschikbaar"
+                        : "No plan available"}
             </h3>
           </div>
         </motion.div>
@@ -657,7 +748,7 @@ export default function PlanerarenTab({
                           </div>
                         )}
 
-                        {/* Directions — only for off-site future items */}
+                        {/* Directions */}
                         {link && !dimmed && (
                           <motion.a
                             href={link}

@@ -1,30 +1,37 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "main": ".open-next/worker.js",
-  "name": "my-camping-app",
-  "compatibility_date": "2026-03-10",
-  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
-  "assets": {
-    "directory": ".open-next/assets",
-    "binding": "ASSETS",
-  },
-  "services": [
-    {
-      "binding": "WORKER_SELF_REFERENCE",
-      "service": "my-camping-app",
-    },
-  ],
-  "images": {
-    "binding": "IMAGES",
-  },
-  "kv_namespaces": [
-    {
-      "binding": "NEXT_INC_CACHE_KV",
-      "id": "c5c3b41363b34a3db0dee2b8166d8d77",
-    },
-  ],
-  "vars": {
-    "NEXT_PUBLIC_SUPABASE_URL": "=https://owginckufurbobvuqzqf.supabase.co",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_joRNDD0ZQqOUxVE4QF0OMg_EANkLX5r",
-  },
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"main": ".open-next/worker.js",
+	"name": "my-camping-app",
+	"compatibility_date": "2026-03-10",
+	"compatibility_flags": [
+		"nodejs_compat",
+		"global_fetch_strictly_public"
+	],
+	"assets": {
+		"directory": ".open-next/assets",
+		"binding": "ASSETS",
+	},
+	"services": [
+		{
+			"binding": "WORKER_SELF_REFERENCE",
+			"service": "my-camping-app",
+		},
+	],
+	"images": {
+		"binding": "IMAGES",
+	},
+	"kv_namespaces": [
+		{
+			"binding": "NEXT_INC_CACHE_KV",
+			"id": "c5c3b41363b34a3db0dee2b8166d8d77",
+		},
+		{
+			"binding": "AI_PLAN_CACHE",
+			"id": "24543af7f89044fb8fc3f000ec37316c"
+		},
+	],
+	"vars": {
+		"NEXT_PUBLIC_SUPABASE_URL": "=https://owginckufurbobvuqzqf.supabase.co",
+		"NEXT_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_joRNDD0ZQqOUxVE4QF0OMg_EANkLX5r",
+	},
 }

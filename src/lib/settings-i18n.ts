@@ -8,8 +8,8 @@
 
 import type { Campground, TranslatableSettingsFields } from "@/types/database";
 
-export type SupportedLang = "sv" | "en" | "de" | "da";
-type TranslationLang = "en" | "de" | "da";
+export type SupportedLang = "sv" | "en" | "de" | "da" | "nl" | "no";
+type TranslationLang = "en" | "de" | "da" | "nl" | "no";
 
 /**
  * Returns the translated value of a campground settings field

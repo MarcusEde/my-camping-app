@@ -10,7 +10,12 @@
 import { getTodaysOpeningHours } from "@/lib/place-utils";
 import type { RoadDistanceMap } from "@/lib/routing";
 import { getSettingsField } from "@/lib/settings-i18n";
-import type { Announcement, CachedPlace, Campground } from "@/types/database";
+import type {
+  Announcement,
+  CachedPlace,
+  Campground,
+  InternalLocation,
+} from "@/types/database";
 import { motion } from "framer-motion";
 import {
   CalendarHeart,
@@ -35,10 +40,6 @@ import { hexToRgba } from "../GuestAppUI";
 
 /* ── Translation helpers ─────────────────────────────── */
 
-/**
- * Returns translated announcement title & content,
- * falling back to Swedish originals.
- */
 function getAnnouncementText(
   ann: Announcement,
   lang: Lang,
@@ -51,9 +52,6 @@ function getAnnouncementText(
   };
 }
 
-/**
- * Returns translated owner note, falling back to Swedish.
- */
 function getOwnerNote(place: CachedPlace, lang: Lang): string | null {
   if (!place.owner_note) return null;
   if (lang === "sv") return place.owner_note;
@@ -86,6 +84,28 @@ const EMOJI: Record<string, string> = {
   swimming: "🏊",
   cinema: "🎬",
   spa: "💆",
+  activity: "🎯",
+  playground: "🛝",
+  sports: "🏸",
+  attraction: "🎡",
+  other: "📍",
+};
+const FACILITY_EMOJI: Record<string, string> = {
+  toilet: "🚻",
+  shower: "🚿",
+  laundry: "👕",
+  kitchen: "🍳",
+  playground: "🛝",
+  pool: "🏊",
+  reception: "🏕️",
+  shop: "🛒",
+  recycling: "♻️",
+  bbq: "🔥",
+  electricity: "⚡",
+  water: "🚰",
+  wifi: "📶",
+  parking: "🅿️",
+  dog_area: "🐕",
   other: "📍",
 };
 
@@ -136,6 +156,7 @@ const t: Record<
     open: string;
     closed: string;
     onSite: string;
+    facilities: string;
   }
 > = {
   sv: {
@@ -167,6 +188,7 @@ const t: Record<
     open: "Öppet",
     closed: "Stängt",
     onSite: "På området",
+    facilities: "Faciliteter",
   },
   en: {
     wifi: "Wi-Fi",
@@ -197,6 +219,7 @@ const t: Record<
     open: "Open",
     closed: "Closed",
     onSite: "On site",
+    facilities: "Facilities",
   },
   de: {
     wifi: "WLAN",
@@ -227,6 +250,7 @@ const t: Record<
     open: "Geöffnet",
     closed: "Geschlossen",
     onSite: "Auf dem Platz",
+    facilities: "Einrichtungen",
   },
   da: {
     wifi: "Wi-Fi",
@@ -257,6 +281,69 @@ const t: Record<
     open: "Åbent",
     closed: "Lukket",
     onSite: "På pladsen",
+    facilities: "Faciliteter",
+  },
+  nl: {
+    wifi: "Wi-Fi",
+    network: "Netwerk",
+    password: "Wachtwoord",
+    copy: "Kopiëren",
+    copied: "Gekopieerd!",
+    wifiPortal: "Log in via je browser",
+    noWifi: "Vraag bij de receptie",
+    quickInfo: "Goed om te weten",
+    checkout: "Uitchecken",
+    trash: "Afval",
+    emergency: "Noodgeval",
+    notices: "Laatste nieuws",
+    noNotices: "Geen mededelingen",
+    noNoticesSub: "Geniet van de rust — we laten het je weten!",
+    showWay: "Route tonen",
+    callReception: "Bel receptie",
+    callSub: "We helpen je graag",
+    findReception: "Vind ons",
+    findSub: "Routebeschrijving",
+    closedToday: "Vandaag gesloten",
+    rainTip: "Binnentip",
+    sunTip: "Tip van de dag",
+    nearbyPlaces: "In de buurt",
+    happeningNow: "Nu op de camping",
+    contact: "Hulp nodig?",
+    open: "Open",
+    closed: "Gesloten",
+    onSite: "Op het terrein",
+    facilities: "Voorzieningen",
+  },
+  no: {
+    wifi: "Wi-Fi",
+    network: "Nettverk",
+    password: "Passord",
+    copy: "Kopier",
+    copied: "Kopiert!",
+    wifiPortal: "Logg inn via nettleseren",
+    noWifi: "Spør i resepsjonen",
+    quickInfo: "Greit å vite",
+    checkout: "Utsjekking",
+    trash: "Søppel",
+    emergency: "Nødsituasjon",
+    notices: "Siste nytt",
+    noNotices: "Ingen oppslag akkurat nå",
+    noNoticesSub: "Nyt roen — vi gir beskjed!",
+    showWay: "Vis vei",
+    callReception: "Ring resepsjonen",
+    callSub: "Vi hjelper gjerne",
+    findReception: "Finn oss",
+    findSub: "Veibeskrivelse",
+    closedToday: "Stengt i dag",
+    rainTip: "Innendørstips",
+    sunTip: "Dagens tips",
+    nearbyPlaces: "I nærheten",
+    happeningNow: "På campingplassen nå",
+    contact: "Trenger du hjelp?",
+    open: "Åpent",
+    closed: "Stengt",
+    onSite: "På plassen",
+    facilities: "Fasiliteter",
   },
 };
 
@@ -271,6 +358,8 @@ interface Props {
   weather?: WeatherProp | null;
   lang: Lang;
   distanceMap: RoadDistanceMap;
+  internalLocations?: InternalLocation[];
+  onDirectionsClick?: (placeId: string) => void;
 }
 
 export default function PulsTab({
@@ -280,6 +369,8 @@ export default function PulsTab({
   weather,
   lang,
   distanceMap,
+  internalLocations = [],
+  onDirectionsClick,
 }: Props) {
   const l = t[lang];
   const brand = campground.primary_color || "#2A3C34";
@@ -310,7 +401,15 @@ export default function PulsTab({
       if (indoor.length > 0) pool = indoor;
     } else {
       const outdoor = pinnedPlaces.filter((p) =>
-        ["beach", "park", "other"].includes(p.category),
+        [
+          "beach",
+          "park",
+          "activity",
+          "playground",
+          "sports",
+          "attraction",
+          "other",
+        ].includes(p.category),
       );
       if (outdoor.length > 0) pool = outdoor;
     }
@@ -334,7 +433,15 @@ export default function PulsTab({
       if (indoor.length > 0) pool = indoor;
     } else {
       const outdoor = pinnedPlaces.filter((p) =>
-        ["beach", "park", "other"].includes(p.category),
+        [
+          "beach",
+          "park",
+          "activity",
+          "playground",
+          "sports",
+          "attraction",
+          "other",
+        ].includes(p.category),
       );
       if (outdoor.length > 0) pool = outdoor;
     }
@@ -364,7 +471,6 @@ export default function PulsTab({
     [announcements],
   );
 
-  // Fall back to empty search if no campground address exists
   const receptionMapLink =
     getGoogleMapsLink(
       campground.latitude,
@@ -387,7 +493,6 @@ export default function PulsTab({
   const hasEmergency = !!campground.emergency_info;
   const isColdForTip = weather ? weather.temp < 15 : false;
 
-  // Resolve translated quick-info content using shared helper
   const expandedContent = expandedQuickInfo
     ? expandedQuickInfo === "checkout"
       ? getSettingsField(campground, "check_out_info", lang)
@@ -411,48 +516,70 @@ export default function PulsTab({
          ═══════════════════════════════════════════════ */}
       <motion.section variants={fadeUp}>
         <div
-          className="overflow-hidden rounded-[20px] bg-white ring-1 ring-stone-200/60"
+          className="rounded-[20px] bg-white ring-1 ring-stone-200/60"
           style={{
             boxShadow:
               "0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.03)",
           }}
         >
           {/* Wi-Fi row */}
-          <div className="flex items-center gap-3 px-4 py-3.5">
+          <div className="flex items-start gap-3 px-4 py-3.5">
             <div
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px]"
+              className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px]"
               style={{ backgroundColor: hexToRgba(brand, 0.07) }}
             >
               <Wifi size={15} strokeWidth={2} style={{ color: brand }} />
             </div>
             <div className="min-w-0 flex-1">
               {hasWifiName && hasWifiPassword ? (
-                /* Updated: uses flex-wrap and adjusted gaps for mobile displays */
-                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                  <span className="text-[13px] font-bold text-stone-800">
+                <div className="space-y-0.5">
+                  <span
+                    className="block text-[13px] font-bold text-stone-800"
+                    style={{
+                      wordBreak: "break-word",
+                      overflowWrap: "break-word",
+                    }}
+                  >
                     {campground.wifi_name}
                   </span>
-                  <span className="hidden text-stone-300 sm:inline">·</span>
-                  <code className="font-mono text-[13px] font-black text-stone-800">
+                  <code
+                    className="block font-mono text-[13px] font-black text-stone-800"
+                    style={{
+                      wordBreak: "break-all",
+                      overflowWrap: "break-word",
+                    }}
+                  >
                     {campground.wifi_password}
                   </code>
                 </div>
               ) : hasWifiName ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[13px] font-bold text-stone-800">
+                <div className="space-y-0.5">
+                  <span
+                    className="block text-[13px] font-bold text-stone-800"
+                    style={{
+                      wordBreak: "break-word",
+                      overflowWrap: "break-word",
+                    }}
+                  >
                     {campground.wifi_name}
                   </span>
-                  <span className="flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.15em] text-stone-400">
+                  <span className="flex flex-wrap items-center gap-1 text-[10px] font-black uppercase tracking-[0.15em] text-stone-400">
                     <Globe size={10} strokeWidth={2} />
                     {l.wifiPortal}
                   </span>
                 </div>
               ) : hasWifiPassword ? (
-                <div className="flex items-baseline gap-2">
-                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-300">
+                <div className="space-y-0.5">
+                  <span className="block text-[10px] font-black uppercase tracking-[0.2em] text-stone-300">
                     {l.password}
                   </span>
-                  <code className="font-mono text-[13px] font-black text-stone-800">
+                  <code
+                    className="block font-mono text-[13px] font-black text-stone-800"
+                    style={{
+                      wordBreak: "break-all",
+                      overflowWrap: "break-word",
+                    }}
+                  >
                     {campground.wifi_password}
                   </code>
                 </div>
@@ -465,7 +592,7 @@ export default function PulsTab({
             {hasWifiPassword && (
               <motion.button
                 onClick={copyPassword}
-                className="flex h-7 shrink-0 items-center gap-1 rounded-full px-2.5 text-[10px] font-black uppercase tracking-[0.1em] text-white"
+                className="mt-0.5 flex h-7 shrink-0 items-center gap-1 rounded-full px-2.5 text-[10px] font-black uppercase tracking-[0.1em] text-white"
                 style={{ backgroundColor: copied ? "#059669" : brand }}
                 whileTap={{ scale: 0.9 }}
                 transition={SPRING_SNAP}
@@ -480,11 +607,11 @@ export default function PulsTab({
             )}
           </div>
 
-          {/* Quick info pills */}
+          {/* Quick info pills — ★ FIX: added flex-wrap */}
           {(hasCheckout || hasTrash || hasEmergency) && (
             <>
               <div className="mx-4 h-px bg-stone-100" />
-              <div className="flex gap-2 px-4 py-2.5">
+              <div className="flex flex-wrap gap-2 px-4 py-2.5">
                 {hasCheckout && (
                   <QuickPill
                     icon={<Clock size={11} strokeWidth={2} />}
@@ -530,7 +657,7 @@ export default function PulsTab({
                 )}
               </div>
 
-              {/* TRANSLATED expanded content */}
+              {/* Expanded content */}
               {expandedQuickInfo && expandedContent && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
@@ -544,7 +671,14 @@ export default function PulsTab({
                   className="overflow-hidden"
                 >
                   <div className="border-t border-stone-100 px-4 pb-3.5 pt-3">
-                    <p className="whitespace-pre-line text-[12px] leading-relaxed text-stone-500">
+                    <p
+                      className="text-[12px] leading-relaxed text-stone-500"
+                      style={{
+                        whiteSpace: "pre-line",
+                        wordBreak: "break-word",
+                        overflowWrap: "break-word",
+                      }}
+                    >
                       {expandedContent}
                     </p>
                   </div>
@@ -554,7 +688,45 @@ export default function PulsTab({
           )}
         </div>
       </motion.section>
-
+      {internalLocations.filter((loc) => loc.is_active).length > 0 && (
+        <motion.section variants={fadeUp}>
+          <RowHeader
+            icon={<MapPin size={12} strokeWidth={2} />}
+            text={l.facilities}
+            brand={brand}
+          />
+          <div
+            className="overflow-hidden rounded-[18px] bg-white ring-1 ring-stone-200/60"
+            style={{
+              boxShadow:
+                "0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.03)",
+            }}
+          >
+            {internalLocations
+              .filter((loc) => loc.is_active)
+              .sort((a, b) => a.walking_minutes - b.walking_minutes)
+              .map((loc, idx) => (
+                <React.Fragment key={loc.id}>
+                  {idx > 0 && <div className="mx-4 h-px bg-stone-100/80" />}
+                  <div className="flex items-center gap-3 px-4 py-3">
+                    <div
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] text-sm"
+                      style={{ backgroundColor: hexToRgba(brand, 0.05) }}
+                    >
+                      {FACILITY_EMOJI[loc.type] ?? "📍"}
+                    </div>
+                    <p className="min-w-0 flex-1 text-[13px] font-bold text-stone-800">
+                      {loc.name}
+                    </p>
+                    <span className="shrink-0 rounded-full bg-stone-50 px-2 py-0.5 text-[10px] font-black text-stone-400 ring-1 ring-stone-200/60">
+                      🚶 {loc.walking_minutes} min
+                    </span>
+                  </div>
+                </React.Fragment>
+              ))}
+          </div>
+        </motion.section>
+      )}
       {/* ═══════════════════════════════════════════════
          2. ANNOUNCEMENTS
          ═══════════════════════════════════════════════ */}
@@ -621,6 +793,9 @@ export default function PulsTab({
               }}
               whileTap={{ scale: 0.97 }}
               transition={SPRING_TAP}
+              onClick={() =>
+                advisedPlace && onDirectionsClick?.(advisedPlace.id)
+              }
             >
               <TipContent
                 place={advisedPlace}
@@ -636,14 +811,12 @@ export default function PulsTab({
               </div>
             </motion.a>
           ) : (
-            <motion.div
+            <div
               className="flex items-center gap-3 rounded-[18px] bg-white px-4 py-3.5 ring-1 ring-stone-200/60"
               style={{
                 boxShadow:
                   "0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.03)",
               }}
-              whileTap={{ scale: 0.97 }}
-              transition={SPRING_TAP}
             >
               <TipContent
                 place={advisedPlace}
@@ -663,7 +836,7 @@ export default function PulsTab({
                   {l.onSite}
                 </div>
               )}
-            </motion.div>
+            </div>
           )}
         </motion.section>
       )}
@@ -696,6 +869,7 @@ export default function PulsTab({
                   closedLabel={l.closed}
                   onSiteLabel={l.onSite}
                   lang={lang}
+                  onDirectionsClick={onDirectionsClick}
                 />
               </React.Fragment>
             ))}
@@ -883,15 +1057,17 @@ function CompactNoticeRow({
   const { title, content } = getAnnouncementText(ann, lang);
 
   return (
-    <motion.div
-      className="flex items-center gap-3 px-4 py-3"
-      whileTap={{ scale: 0.98 }}
-      transition={SPRING_TAP}
-    >
-      <span className="text-sm leading-none">{cfg.emoji}</span>
+    <div className="flex items-start gap-3 px-4 py-3">
+      <span className="mt-0.5 text-sm leading-none">{cfg.emoji}</span>
       <div className="min-w-0 flex-1">
-        <div className="flex items-baseline gap-2">
-          <p className="truncate text-[13px] font-bold text-stone-800">
+        <div className="flex items-center gap-2">
+          <p
+            className="text-[13px] font-bold text-stone-800"
+            style={{
+              wordBreak: "break-word",
+              overflowWrap: "break-word",
+            }}
+          >
             {title}
           </p>
           <span
@@ -899,14 +1075,17 @@ function CompactNoticeRow({
             style={{ backgroundColor: cfg.dot }}
           />
         </div>
-        <p className="truncate text-[11px] text-stone-400">{content}</p>
+        <p
+          className="mt-0.5 text-[11px] leading-relaxed text-stone-400"
+          style={{
+            wordBreak: "break-word",
+            overflowWrap: "break-word",
+          }}
+        >
+          {content}
+        </p>
       </div>
-      <ChevronRight
-        size={13}
-        strokeWidth={2}
-        className="shrink-0 text-stone-300"
-      />
-    </motion.div>
+    </div>
   );
 }
 
@@ -918,6 +1097,7 @@ function DensePlaceRow({
   closedLabel,
   onSiteLabel,
   lang,
+  onDirectionsClick,
 }: {
   place: CachedPlace;
   distance: string;
@@ -926,6 +1106,7 @@ function DensePlaceRow({
   closedLabel: string;
   onSiteLabel: string;
   lang: Lang;
+  onDirectionsClick?: (placeId: string) => void;
 }) {
   const mapLink = getGoogleMapsLink(
     place.latitude,
@@ -952,7 +1133,7 @@ function DensePlaceRow({
         <p className="truncate text-[13px] font-bold text-stone-800">
           {place.name}
         </p>
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           {place.is_on_site ? (
             <span
               className="text-[10px] font-black uppercase tracking-[0.15em]"
@@ -1018,17 +1199,12 @@ function DensePlaceRow({
       className="flex items-center gap-3 px-4 py-3"
       whileTap={{ scale: 0.98 }}
       transition={SPRING_TAP}
+      onClick={() => onDirectionsClick?.(place.id)}
     >
       {innerContent}
     </motion.a>
   ) : (
-    <motion.div
-      className="flex items-center gap-3 px-4 py-3"
-      whileTap={{ scale: 0.98 }}
-      transition={SPRING_TAP}
-    >
-      {innerContent}
-    </motion.div>
+    <div className="flex items-center gap-3 px-4 py-3">{innerContent}</div>
   );
 }
 

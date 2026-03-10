@@ -96,10 +96,30 @@ const CATEGORY_STYLES: Record<string, CategoryStyle> = {
     emoji: "🛍️",
     dotColor: "#5eead4",
   },
+  activity: {
+    colors: ["#fbbf24", "#fde68a", "#fffbeb"],
+    emoji: "🎯",
+    dotColor: "#f59e0b",
+  },
+  playground: {
+    colors: ["#a3e635", "#bef264", "#f7fee7"],
+    emoji: "🛝",
+    dotColor: "#84cc16",
+  },
+  sports: {
+    colors: ["#6ee7b7", "#a7f3d0", "#ecfdf5"],
+    emoji: "🏸",
+    dotColor: "#34d399",
+  },
+  attraction: {
+    colors: ["#f9a8d4", "#fbcfe8", "#fdf2f8"],
+    emoji: "🎡",
+    dotColor: "#f472b6",
+  },
   other: {
-    colors: ["#d6d3d1", "#e7e5e4", "#fafaf9"],
-    emoji: "📍",
-    dotColor: "#a8a29e",
+    colors: ["#fbbf24", "#fed7aa", "#fffbeb"],
+    emoji: "⭐",
+    dotColor: "#f59e0b",
   },
 };
 
@@ -136,12 +156,16 @@ const ROW_DEFS = [
       en: "Swim & Cafe",
       de: "Baden & Café",
       da: "Bad & Café",
+      nl: "Zwemmen & Café",
+      no: "Bad & Kafé",
     },
     subtitle: {
       sv: "Stränder, glass & caféer",
       en: "Beaches, ice cream & cafes",
       de: "Strände, Eis & Cafés",
       da: "Strande, is & caféer",
+      nl: "Stranden, ijs & cafés",
+      no: "Strender, is & kaféer",
     },
     filter: (p: CachedPlace) =>
       ["beach", "cafe", "swimming", "spa"].includes(p.category),
@@ -154,47 +178,88 @@ const ROW_DEFS = [
       en: "Food & Drink",
       de: "Essen & Trinken",
       da: "Mad & Drikke",
+      nl: "Eten & Drinken",
+      no: "Mat & Drikke",
     },
     subtitle: {
       sv: "Restauranger i närområdet",
       en: "Nearby restaurants",
       de: "Restaurants in der Nähe",
       da: "Restauranter i nærheden",
+      nl: "Restaurants in de buurt",
+      no: "Restauranter i nærheten",
     },
     filter: (p: CachedPlace) => p.category === "restaurant",
+  },
+  {
+    id: "aktiviteter",
+    emoji: "🎯",
+    title: {
+      sv: "Aktiviteter & Nöje",
+      en: "Activities & Fun",
+      de: "Aktivitäten & Spaß",
+      da: "Aktiviteter & Sjov",
+      nl: "Activiteiten & Plezier",
+      no: "Aktiviteter & Moro",
+    },
+    subtitle: {
+      sv: "Sport, lek & äventyr",
+      en: "Sports, play & adventure",
+      de: "Sport, Spiel & Abenteuer",
+      da: "Sport, leg & eventyr",
+      nl: "Sport, spel & avontuur",
+      no: "Sport, lek & eventyr",
+    },
+    filter: (p: CachedPlace) =>
+      [
+        "bowling",
+        "cinema",
+        "activity",
+        "playground",
+        "sports",
+        "attraction",
+      ].includes(p.category),
   },
   {
     id: "upplevelser",
     emoji: "🧭",
     title: {
-      sv: "Se & Göra",
-      en: "See & Do",
-      de: "Sehen & Erleben",
-      da: "Se & Gøre",
+      sv: "Natur & Kultur",
+      en: "Nature & Culture",
+      de: "Natur & Kultur",
+      da: "Natur & Kultur",
+      nl: "Natuur & Cultuur",
+      no: "Natur & Kultur",
     },
     subtitle: {
-      sv: "Utflykter, natur & nöje",
-      en: "Excursions, nature & fun",
-      de: "Ausflüge, Natur & Spaß",
-      da: "Udflugter, natur & sjov",
+      sv: "Parker, museer & utflykter",
+      en: "Parks, museums & excursions",
+      de: "Parks, Museen & Ausflüge",
+      da: "Parker, museer & udflugter",
+      nl: "Parken, musea & uitstapjes",
+      no: "Parker, museer & utflukter",
     },
     filter: (p: CachedPlace) =>
-      ["park", "museum", "bowling", "cinema", "other"].includes(p.category),
+      ["park", "museum", "other"].includes(p.category),
   },
   {
-    id: "vardagsbehov",
-    emoji: "🛒",
+    id: "vardagsbehov", // ← ADD
+    emoji: "🛒", // ← ADD
     title: {
       sv: "Vardagsbehov",
       en: "Essentials",
       de: "Bedarf",
       da: "Hverdagsbehov",
+      nl: "Dagelijkse behoeften",
+      no: "Daglige behov",
     },
     subtitle: {
       sv: "Mataffärer & service",
       en: "Groceries & services",
       de: "Lebensmittel & Service",
       da: "Supermarkeder & service",
+      nl: "Supermarkten & service",
+      no: "Dagligvare & service",
     },
     filter: (p: CachedPlace) => p.category === "shopping",
   },
@@ -264,6 +329,30 @@ const labels: Record<Lang, Labels> = {
     noPlacesSub: "Vi arbejder på at tilføje steder!",
     onSite: "På pladsen",
   },
+  nl: {
+    hitaHit: "Route tonen",
+    originalLang: "🇸🇪 Originele tekst",
+    staffPick: "Aanbeveling",
+    closedToday: "Vandaag gesloten",
+    openNow: "Nu open",
+    closedNow: "Nu gesloten",
+    open24: "24/7 open",
+    noPlaces: "Nog geen plekken",
+    noPlacesSub: "We werken eraan om plekken toe te voegen!",
+    onSite: "Op het terrein",
+  },
+  no: {
+    hitaHit: "Vis veien",
+    originalLang: "🇸🇪 Originaltekst",
+    staffPick: "Anbefaling",
+    closedToday: "Stengt i dag",
+    openNow: "Åpent nå",
+    closedNow: "Stengt nå",
+    open24: "Døgnåpent",
+    noPlaces: "Ingen steder ennå",
+    noPlacesSub: "Vi jobber med å legge til steder!",
+    onSite: "På området",
+  },
 };
 
 /* ── Component ───────────────────────────────────────── */
@@ -273,6 +362,7 @@ interface Props {
   places: CachedPlace[];
   lang: Lang;
   distanceMap: RoadDistanceMap;
+  onDirectionsClick?: (placeId: string) => void;
 }
 
 export default function UtforskaTab({
@@ -280,6 +370,7 @@ export default function UtforskaTab({
   places,
   lang,
   distanceMap,
+  onDirectionsClick,
 }: Props) {
   const brand = campground.primary_color || "#2A3C34";
   const l = labels[lang];
@@ -333,6 +424,7 @@ export default function UtforskaTab({
               labels={l}
               isSwedish={isSwedish}
               distance={distanceMap[place.id] ?? ""}
+              onDirectionsClick={onDirectionsClick}
             />
           ))}
         </div>
@@ -368,6 +460,7 @@ function PlaceCard({
   labels: l,
   isSwedish,
   distance,
+  onDirectionsClick,
 }: {
   place: CachedPlace;
   campground: Campground;
@@ -376,6 +469,7 @@ function PlaceCard({
   labels: Labels;
   isSwedish: boolean;
   distance: string;
+  onDirectionsClick?: (placeId: string) => void;
 }) {
   const catStyle = getCategoryStyle(place.category);
   const angle = gradientAngle(place.id);
@@ -434,7 +528,13 @@ function PlaceCard({
 
   return (
     <motion.div
-      className="flex w-[240px] shrink-0 snap-start flex-col overflow-hidden rounded-[24px] bg-white ring-1 ring-stone-200/60"
+      className="flex w-[240px] shrink-0 snap-start flex-col overflow-hidden rounded-[24px] bg-white"
+      style={{
+        boxShadow: place.is_pinned
+          ? `0 0 0 2px ${hexToRgba("#f59e0b", 0.4)}, 0 4px 16px ${hexToRgba("#f59e0b", 0.12)}`
+          : undefined,
+        border: place.is_pinned ? "none" : "1px solid rgba(214,211,209,0.6)",
+      }}
       whileTap={{ scale: 0.97 }}
       transition={SPRING_TAP}
     >
@@ -493,23 +593,29 @@ function PlaceCard({
         </span>
 
         {/* Pinned / Staff pick badge */}
+        {/* Staff pick — prominent golden treatment */}
         {place.is_pinned && (
-          <span
-            className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-white"
+          <div
+            className="absolute inset-x-3 top-3 z-10 flex items-center gap-1.5 rounded-full px-3 py-1.5"
             style={{
-              fontSize: "9px",
-              fontWeight: 900,
-              letterSpacing: "0.15em",
-              textTransform: "uppercase",
-              backgroundColor: hexToRgba(brand, 0.75),
-              backdropFilter: "blur(12px)",
-              WebkitBackdropFilter: "blur(12px)",
-              zIndex: 2,
+              background:
+                "linear-gradient(135deg, rgba(245,158,11,0.9), rgba(217,119,6,0.9))",
+              boxShadow: "0 2px 8px rgba(245,158,11,0.3)",
             }}
           >
-            <Star size={9} fill="currentColor" />
-            {l.staffPick}
-          </span>
+            <Star size={10} fill="white" className="text-white" />
+            <span
+              style={{
+                fontSize: "9px",
+                fontWeight: 900,
+                letterSpacing: "0.15em",
+                textTransform: "uppercase",
+                color: "white",
+              }}
+            >
+              {l.staffPick}
+            </span>
+          </div>
         )}
 
         {/* Rating badge */}
@@ -614,7 +720,10 @@ function PlaceCard({
               }}
               whileTap={{ scale: 0.95 }}
               transition={SPRING_TAP}
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDirectionsClick?.(place.id); // ← ADD
+              }}
             >
               <ExternalLink size={13} strokeWidth={2.5} />
               {l.hitaHit}

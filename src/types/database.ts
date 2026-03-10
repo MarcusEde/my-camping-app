@@ -18,6 +18,10 @@ export type PlaceCategory =
   | "shopping"
   | "cinema"
   | "spa"
+  | "activity"
+  | "playground"
+  | "sports"
+  | "attraction"
   | "other";
 
 export type AnnouncementType = "info" | "event" | "warning";
@@ -27,7 +31,7 @@ export type AnnouncementPriority = "normal" | "high";
 
 /** Per-language translation for an announcement (title + content). */
 export type AnnouncementTranslations = {
-  [lang in "en" | "de" | "da"]?: {
+  [lang in "en" | "de" | "da" | "nl" | "no"]?: {
     title: string;
     content: string;
   };
@@ -35,12 +39,12 @@ export type AnnouncementTranslations = {
 
 /** Per-language translation for a short owner note (plain string). */
 export type NoteTranslations = {
-  [lang in "en" | "de" | "da"]?: string;
+  [lang in "en" | "de" | "da" | "nl" | "no"]?: string;
 };
 
 /** Per-language translation for a partner (name + description). */
 export type PartnerTranslations = {
-  [lang in "en" | "de" | "da"]?: {
+  [lang in "en" | "de" | "da" | "nl" | "no"]?: {
     business_name: string;
     description: string;
   };
@@ -56,7 +60,7 @@ export type TranslatableSettingsFields =
 
 /** Per-language translation for campground info/settings text. */
 export type SettingsTranslations = {
-  [lang in "en" | "de" | "da"]?: {
+  [lang in "en" | "de" | "da" | "nl" | "no"]?: {
     [field in TranslatableSettingsFields]?: string;
   };
 };
@@ -197,6 +201,50 @@ export interface PromotedPartnerWithClicks extends PromotedPartner {
   linked_place_name?: string | null;
 }
 
+// ─── Analytics ────────────────────────────────────────────
+
+export type PageView = {
+  id: string;
+  campground_id: string;
+  session_id: string;
+  tab: string;
+  created_at: string;
+};
+
+export type GuestFeedbackRow = {
+  id: string;
+  campground_id: string;
+  session_id: string;
+  rating: number;
+  comment: string | null;
+  created_at: string;
+};
+
+export type DirectionsClick = {
+  id: string;
+  campground_id: string;
+  place_id: string;
+  session_id: string | null;
+  created_at: string;
+};
+
+export interface AnalyticsStats {
+  totalViews: number;
+  uniqueGuests: number;
+  plannerUsage: number;
+  avgRating: number | null;
+  feedbackCount: number;
+  directionsClicks: number;
+  topTabs: { tab: string; count: number }[];
+  topPlaces: { placeId: string; placeName: string; clicks: number }[];
+  dailyViews: { date: string; views: number; unique: number }[];
+  recentFeedback: {
+    rating: number;
+    comment: string | null;
+    created_at: string;
+  }[];
+  weekOverWeek: { viewsChange: number; guestsChange: number };
+}
 // ─── Database Schema ──────────────────────────────────────
 
 export type Database = {
@@ -230,6 +278,24 @@ export type Database = {
         Row: InternalLocation;
         Insert: Omit<InternalLocation, "id" | "created_at">;
         Update: Partial<Omit<InternalLocation, "id" | "created_at">>;
+        Relationships: [];
+      };
+      page_views: {
+        Row: PageView;
+        Insert: Omit<PageView, "id" | "created_at">;
+        Update: Partial<Omit<PageView, "id" | "created_at">>;
+        Relationships: [];
+      };
+      guest_feedback: {
+        Row: GuestFeedbackRow;
+        Insert: Omit<GuestFeedbackRow, "id" | "created_at">;
+        Update: Partial<Omit<GuestFeedbackRow, "id" | "created_at">>;
+        Relationships: [];
+      };
+      directions_clicks: {
+        Row: DirectionsClick;
+        Insert: Omit<DirectionsClick, "id" | "created_at">;
+        Update: Partial<Omit<DirectionsClick, "id" | "created_at">>;
         Relationships: [];
       };
     };

@@ -25,14 +25,18 @@ const CampgroundSettingsSchema = z.object({
   phone: z.string().max(20, "Telefonnumret är för långt").nullable().optional(),
   email: z.string().email("Ogiltig e-post").max(255).nullable().optional(),
   website: z.string().url("Ogiltig webbadress").max(255).nullable().optional(),
-  wifi_name: z.string().max(50, "Max 50 tecken").optional(),
-  wifi_password: z.string().max(50, "Max 50 tecken").optional(),
-  check_out_info: z.string().max(1000, "Max 1000 tecken").optional(),
-  trash_rules: z.string().max(1000, "Max 1000 tecken").optional(),
-  reception_hours: z.string().max(1000, "Max 1000 tecken").optional(),
-  emergency_info: z.string().max(1000, "Max 1000 tecken").optional(),
-  camp_rules: z.string().max(1000, "Max 1000 tecken").optional(),
-  address: z.string().max(255).optional(),
+  wifi_name: z.string().max(50, "Max 50 tecken").nullable().optional(),
+  wifi_password: z.string().max(50, "Max 50 tecken").nullable().optional(),
+  check_out_info: z.string().max(1000, "Max 1000 tecken").nullable().optional(),
+  trash_rules: z.string().max(1000, "Max 1000 tecken").nullable().optional(),
+  reception_hours: z
+    .string()
+    .max(1000, "Max 1000 tecken")
+    .nullable()
+    .optional(),
+  emergency_info: z.string().max(1000, "Max 1000 tecken").nullable().optional(),
+  camp_rules: z.string().max(1000, "Max 1000 tecken").nullable().optional(),
+  address: z.string().max(255).nullable().optional(),
   hero_image_position: z.string().max(50).nullable().optional(),
 });
 
@@ -47,6 +51,7 @@ const CustomPlaceSchema = z.object({
   category: z.string().min(1, "Kategori krävs"),
   address: z.string().max(255).optional(),
   isOnSite: z.boolean().optional(),
+  isIndoor: z.boolean().optional(),
   customHours: z.string().max(255).optional(),
 });
 
@@ -113,6 +118,46 @@ function revalidateAll(slug?: string) {
   revalidatePath("/camp/[slug]", "page");
 }
 
+/**
+ * 🌐 SAFE TRANSLATION HELPER
+ * Wraps translation calls so they never crash the parent action.
+ * On failure, returns null (caller inserts without translations).
+ */
+async function safeTranslateAnnouncement(
+  title: string,
+  content: string,
+): Promise<Record<string, unknown> | null> {
+  try {
+    return await translateAnnouncement(title, content);
+  } catch (err) {
+    console.error("[Translation] Announcement translation failed:", err);
+    return null;
+  }
+}
+
+async function safeTranslateNote(
+  note: string,
+): Promise<Record<string, unknown> | null> {
+  try {
+    return await translateNote(note);
+  } catch (err) {
+    console.error("[Translation] Note translation failed:", err);
+    return null;
+  }
+}
+
+async function safeTranslatePartner(
+  name: string,
+  description: string,
+): Promise<Record<string, unknown> | null> {
+  try {
+    return await translatePartner(name, description);
+  } catch (err) {
+    console.error("[Translation] Partner translation failed:", err);
+    return null;
+  }
+}
+
 // ━━━ AUTH ━━━
 export async function logout() {
   const supabase = await createClient();
@@ -156,8 +201,14 @@ export async function updateCampgroundSettings(
 
   if (textChanged) {
     if (hasTranslatableContent) {
-      const settingsTranslations = await translateSettings(translatableFields);
-      settingsTranslationsUpdate = settingsTranslations;
+      try {
+        const settingsTranslations =
+          await translateSettings(translatableFields);
+        settingsTranslationsUpdate = settingsTranslations;
+      } catch (err) {
+        console.error("[Translation] Settings translation failed:", err);
+        // Don't block save — just skip translations
+      }
     } else {
       settingsTranslationsUpdate = {};
     }
@@ -165,9 +216,9 @@ export async function updateCampgroundSettings(
 
   const updatePayload: Record<string, unknown> = {
     primary_color: data.primary_color,
-    hero_image_url: data.hero_image_url,
-    hero_image_position: data.hero_image_position,
-    logo_url: data.logo_url,
+    hero_image_url: data.hero_image_url ?? null,
+    hero_image_position: data.hero_image_position ?? null,
+    logo_url: data.logo_url ?? null,
     wifi_name: data.wifi_name || null,
     wifi_password: data.wifi_password || null,
     trash_rules: data.trash_rules || null,
@@ -212,20 +263,25 @@ export async function createAnnouncement(
   const trimmedTitle = validated.data.title.trim();
   const trimmedContent = validated.data.content.trim();
 
-  const translations = await translateAnnouncement(
+  // Translation is non-blocking — announcement is saved even if it fails
+  const translations = await safeTranslateAnnouncement(
     trimmedTitle,
     trimmedContent,
   );
 
-  const { error } = await supabase.from("announcements").insert([
-    {
-      campground_id: campgroundId,
-      title: trimmedTitle,
-      content: trimmedContent,
-      type: validated.data.type,
-      translations,
-    },
-  ]);
+  const insertPayload: Record<string, unknown> = {
+    campground_id: campgroundId,
+    title: trimmedTitle,
+    content: trimmedContent,
+    type: validated.data.type,
+  };
+  if (translations) {
+    insertPayload.translations = translations;
+  }
+
+  const { error } = await supabase
+    .from("announcements")
+    .insert([insertPayload]);
 
   if (error) throw new Error(error.message);
   revalidateAll(camp.slug);
@@ -254,19 +310,24 @@ export async function updateAnnouncement(
   const trimmedTitle = validated.data.title.trim();
   const trimmedContent = validated.data.content.trim();
 
-  const translations = await translateAnnouncement(
+  // Translation is non-blocking
+  const translations = await safeTranslateAnnouncement(
     trimmedTitle,
     trimmedContent,
   );
 
+  const updatePayload: Record<string, unknown> = {
+    title: trimmedTitle,
+    content: trimmedContent,
+    type: validated.data.type,
+  };
+  if (translations) {
+    updatePayload.translations = translations;
+  }
+
   const { error } = await supabase
     .from("announcements")
-    .update({
-      title: trimmedTitle,
-      content: trimmedContent,
-      type: validated.data.type,
-      translations,
-    })
+    .update(updatePayload)
     .eq("id", announcementId);
 
   if (error) throw new Error(error.message);
@@ -351,14 +412,19 @@ export async function saveNote(placeId: string, note: string) {
   const trimmedNote = note.trim();
 
   if (trimmedNote) {
-    const noteTranslations = await translateNote(trimmedNote);
+    // Translation is non-blocking
+    const noteTranslations = await safeTranslateNote(trimmedNote);
+
+    const updatePayload: Record<string, unknown> = {
+      owner_note: trimmedNote,
+    };
+    if (noteTranslations) {
+      updatePayload.note_translations = noteTranslations;
+    }
 
     const { error } = await supabase
       .from("cached_places")
-      .update({
-        owner_note: trimmedNote,
-        note_translations: noteTranslations,
-      })
+      .update(updatePayload)
       .eq("id", placeId);
 
     if (error) throw new Error(error.message);
@@ -383,6 +449,7 @@ export async function addCustomPlace(
   category: string,
   address?: string,
   isOnSite?: boolean,
+  isIndoor?: boolean,
   customHours?: string,
 ) {
   const validated = CustomPlaceSchema.safeParse({
@@ -390,11 +457,19 @@ export async function addCustomPlace(
     category,
     address,
     isOnSite,
+    isIndoor,
     customHours,
   });
   if (!validated.success) throw new Error(validated.error.issues[0].message);
 
   const { supabase, camp } = await verifyOwnership(campgroundId);
+
+  // Use explicit isIndoor from the form. Only auto-detect if not provided.
+  const indoor =
+    validated.data.isIndoor ??
+    ["bowling", "museum", "cinema", "spa", "shopping"].includes(
+      validated.data.category,
+    );
 
   const { error } = await supabase.from("cached_places").insert([
     {
@@ -406,9 +481,7 @@ export async function addCustomPlace(
       is_hidden: false,
       is_on_site: validated.data.isOnSite ?? false,
       custom_hours: validated.data.customHours?.trim() || null,
-      is_indoor: ["bowling", "museum", "cinema", "spa", "shopping"].includes(
-        validated.data.category,
-      ),
+      is_indoor: indoor,
       fetched_at: new Date().toISOString(),
     },
   ]);
@@ -422,6 +495,7 @@ export async function updatePlaceDetails(
   placeId: string,
   data: {
     is_on_site?: boolean;
+    is_indoor?: boolean;
     custom_hours?: string | null;
   },
 ) {
@@ -435,12 +509,15 @@ export async function updatePlaceDetails(
 
   const { camp } = await verifyOwnership(place.campground_id);
 
+  const updatePayload: Record<string, unknown> = {};
+  if (data.is_on_site !== undefined) updatePayload.is_on_site = data.is_on_site;
+  if (data.is_indoor !== undefined) updatePayload.is_indoor = data.is_indoor;
+  if (data.custom_hours !== undefined)
+    updatePayload.custom_hours = data.custom_hours;
+
   const { error } = await supabase
     .from("cached_places")
-    .update({
-      is_on_site: data.is_on_site,
-      custom_hours: data.custom_hours,
-    })
+    .update(updatePayload)
     .eq("id", placeId);
 
   if (error) throw new Error(error.message);
@@ -483,28 +560,31 @@ export async function createPromotedPartner(
   const { supabase, camp } = await verifyOwnership(campgroundId);
   const data = validated.data;
 
-  // FIX: Generera översättningar för den nya partnern
-  const translations = await translatePartner(
+  const translations = await safeTranslatePartner(
     data.business_name.trim(),
     data.description?.trim() || "",
   );
 
-  const { error } = await supabase.from("promoted_partners").insert([
-    {
-      campground_id: campgroundId,
-      business_name: data.business_name.trim(),
-      description: data.description?.trim() || null,
-      website_url: data.website_url?.trim() || null,
-      phone: data.phone?.trim() || null,
-      logo_url: data.logo_url?.trim() || null,
-      cached_place_id: data.cached_place_id || null,
-      priority_rank: data.priority_rank ?? 0,
-      is_active: true,
-      starts_at: data.starts_at || new Date().toISOString(),
-      ends_at: data.ends_at || null,
-      translations, // Spara översättningar
-    },
-  ]);
+  const insertPayload: Record<string, unknown> = {
+    campground_id: campgroundId,
+    business_name: data.business_name.trim(),
+    description: data.description?.trim() || null,
+    website_url: data.website_url?.trim() || null,
+    phone: data.phone?.trim() || null,
+    logo_url: data.logo_url?.trim() || null,
+    cached_place_id: data.cached_place_id || null,
+    priority_rank: data.priority_rank ?? 0,
+    is_active: true,
+    starts_at: data.starts_at || new Date().toISOString(),
+    ends_at: data.ends_at || null,
+  };
+  if (translations) {
+    insertPayload.translations = translations;
+  }
+
+  const { error } = await supabase
+    .from("promoted_partners")
+    .insert([insertPayload]);
 
   if (error) throw new Error(error.message);
   revalidateAll(camp.slug);
@@ -521,7 +601,6 @@ export async function updatePromotedPartner(
   const data = validated.data;
   const supabase = await createClient();
 
-  // FIX: Hämta gammal data för att se om texten ändrats
   const { data: partner } = await supabase
     .from("promoted_partners")
     .select("campground_id, business_name, description")
@@ -531,7 +610,6 @@ export async function updatePromotedPartner(
   if (!partner) throw new Error("Partner saknas.");
   const { camp } = await verifyOwnership(partner.campground_id);
 
-  // Kontrollera om namn eller beskrivning har ändrats
   const nameChanged =
     data.business_name !== undefined &&
     data.business_name.trim() !== partner.business_name;
@@ -539,18 +617,19 @@ export async function updatePromotedPartner(
     data.description !== undefined &&
     (data.description?.trim() || null) !== (partner.description || null);
 
-  const updatePayload: Record<string, any> = {
+  const updatePayload: Record<string, unknown> = {
     ...data,
     business_name: data.business_name?.trim(),
   };
 
-  // FIX: Översätt på nytt om innehållet ändrats
   if (nameChanged || descChanged) {
-    const newTranslations = await translatePartner(
+    const newTranslations = await safeTranslatePartner(
       data.business_name?.trim() || partner.business_name,
       data.description?.trim() || partner.description || "",
     );
-    updatePayload.translations = newTranslations;
+    if (newTranslations) {
+      updatePayload.translations = newTranslations;
+    }
   }
 
   const { error } = await supabase
@@ -613,5 +692,59 @@ export async function trackPartnerClick(partnerId: string) {
     .from("partner_clicks")
     .insert({ partner_id: partnerId });
   if (error) console.error("Click track failed:", error.message);
+  return { success: true };
+}
+// ━━━ FACILITIES ━━━
+
+export async function saveFacility(
+  campgroundId: string,
+  data: {
+    name: string;
+    type: string;
+    walking_minutes: number;
+    is_active: boolean;
+  },
+) {
+  const { supabase, camp } = await verifyOwnership(campgroundId);
+
+  const name = data.name.trim();
+  if (!name) throw new Error("Namn krävs.");
+  if (name.length > 100) throw new Error("Max 100 tecken.");
+
+  const { data: inserted, error } = await supabase
+    .from("internal_locations")
+    .insert({
+      campground_id: campgroundId,
+      name,
+      type: data.type,
+      walking_minutes: Math.max(0, Math.min(30, data.walking_minutes)),
+      is_active: data.is_active,
+    })
+    .select("id")
+    .single();
+
+  if (error) throw new Error(error.message);
+  revalidateAll(camp.slug);
+  return { success: true, id: inserted.id };
+}
+
+export async function deleteFacility(facilityId: string) {
+  const supabase = await createClient();
+  const { data: facility } = await supabase
+    .from("internal_locations")
+    .select("campground_id")
+    .eq("id", facilityId)
+    .single();
+
+  if (!facility) throw new Error("Facilitet saknas.");
+  const { camp } = await verifyOwnership(facility.campground_id);
+
+  const { error } = await supabase
+    .from("internal_locations")
+    .delete()
+    .eq("id", facilityId);
+
+  if (error) throw new Error(error.message);
+  revalidateAll(camp.slug);
   return { success: true };
 }

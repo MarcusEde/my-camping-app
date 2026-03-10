@@ -26,7 +26,7 @@ export async function translateAnnouncement(
 
     const prompt = `
 You are a professional translator for a Scandinavian camping app.
-Translate the following Swedish announcement into English (en), German (de) and Danish (da).
+Translate the following Swedish announcement into English (en), German (de), Danish (da), Dutch (nl) and Norwegian Bokmål (no).
 Keep the tone friendly and concise — these are short notices shown to camping guests.
 
 Swedish title: "${title}"
@@ -36,7 +36,9 @@ Return ONLY valid JSON matching this exact shape (no markdown, no wrapping):
 {
   "en": { "title": "…", "content": "…" },
   "de": { "title": "…", "content": "…" },
-  "da": { "title": "…", "content": "…" }
+  "da": { "title": "…", "content": "…" },
+  "nl": { "title": "…", "content": "…" },
+  "no": { "title": "…", "content": "…" }
 }`;
 
     const result = await model.generateContent({
@@ -62,7 +64,7 @@ export async function translateNote(note: string): Promise<NoteTranslations> {
 
     const prompt = `
 You are a professional translator for a Scandinavian camping app.
-Translate the following short Swedish note into English (en), German (de) and Danish (da).
+Translate the following short Swedish note into English (en), German (de), Danish (da), Dutch (nl) and Norwegian Bokmål (no).
 This is a very brief "staff pick" label (a few words), so keep translations equally short.
 
 Swedish note: "${note}"
@@ -71,7 +73,9 @@ Return ONLY valid JSON matching this exact shape (no markdown, no wrapping):
 {
   "en": "…",
   "de": "…",
-  "da": "…"
+  "da": "…",
+  "nl": "…",
+  "no": "…"
 }`;
 
     const result = await model.generateContent({
@@ -100,7 +104,7 @@ export async function translatePartner(
 
     const prompt = `
 You are a professional translator for a Scandinavian camping app.
-Translate the following Swedish business/partner info into English (en), German (de) and Danish (da).
+Translate the following Swedish business/partner info into English (en), German (de), Danish (da), Dutch (nl) and Norwegian Bokmål (no).
 Keep the tone professional and inviting.
 
 Business Name: "${name}"
@@ -110,7 +114,9 @@ Return ONLY valid JSON matching this exact shape (no markdown, no wrapping):
 {
   "en": { "business_name": "…", "description": "…" },
   "de": { "business_name": "…", "description": "…" },
-  "da": { "business_name": "…", "description": "…" }
+  "da": { "business_name": "…", "description": "…" },
+  "nl": { "business_name": "…", "description": "…" },
+  "no": { "business_name": "…", "description": "…" }
 }`;
 
     const result = await model.generateContent({
@@ -162,7 +168,7 @@ export async function translateSettings(fields: {
 
     const prompt = `
 You are a professional translator for a Scandinavian camping app.
-Translate the following Swedish campground information fields into English (en), German (de) and Danish (da).
+Translate the following Swedish campground information fields into English (en), German (de), Danish (da), Dutch (nl) and Norwegian Bokmål (no).
 These are practical guest-facing notices (check-out times, trash rules, emergency info, camp rules, reception hours).
 Keep the same tone: clear, friendly, and concise. Preserve any line breaks (use \\n in the JSON strings).
 
@@ -176,7 +182,9 @@ Only include the field keys that were provided above:
 {
   "en": { ${fieldKeys} },
   "de": { ${fieldKeys} },
-  "da": { ${fieldKeys} }
+  "da": { ${fieldKeys} },
+  "nl": { ${fieldKeys} },
+  "no": { ${fieldKeys} }
 }`;
 
     const result = await model.generateContent({

@@ -5,6 +5,7 @@ import type {
   Announcement,
   CachedPlace,
   Campground,
+  InternalLocation,
   PromotedPartner,
 } from "@/types/database";
 import { AnimatePresence, motion } from "framer-motion";
@@ -19,15 +20,18 @@ import {
 } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
-import { prefetchAiPlan } from "@/app/camp/[slug]/ai-action"; // ← NEW
+import { prefetchAiPlan } from "@/app/camp/[slug]/ai-action";
 import type { RoadDistanceMap } from "@/lib/routing";
+import { trackDirectionsClick, trackPageView } from "@/lib/tracking";
+import { generateId } from "@/lib/uuid";
+import GuestFeedbackWidget from "./GuestFeedbackWidget";
 import AktiviteterTab from "./tabs/AktiviteterTab";
 import InfoTab from "./tabs/InfoTab";
 import PlanerarenTab from "./tabs/PlanerarenTab";
 import PulsTab from "./tabs/PulsTab";
 import UtforskaTab from "./tabs/UtforskaTab";
 
-export type Lang = "sv" | "en" | "de" | "da";
+export type Lang = "sv" | "en" | "de" | "da" | "nl" | "no";
 export type TabId = "utforska" | "planerare" | "puls" | "aktiviteter" | "info";
 
 export interface WeatherProp {
@@ -78,34 +82,103 @@ const navLabels: Record<Lang, Record<TabId, string>> = {
     aktiviteter: "Aktiviteter",
     info: "Info",
   },
+  nl: {
+    utforska: "Ontdekken",
+    planerare: "Planner",
+    puls: "Home",
+    aktiviteter: "Activiteiten",
+    info: "Info",
+  },
+  no: {
+    utforska: "Utforsk",
+    planerare: "Planlegger",
+    puls: "Hjem",
+    aktiviteter: "Aktiviteter",
+    info: "Info",
+  },
 };
 
 const weatherLabels: Record<string, Record<Lang, string>> = {
-  clear: { sv: "Klart", en: "Clear", de: "Klar", da: "Klart" },
+  clear: {
+    sv: "Klart",
+    en: "Clear",
+    de: "Klar",
+    da: "Klart",
+    nl: "Helder",
+    no: "Klart",
+  },
   nearly_clear: {
     sv: "Mestadels klart",
     en: "Nearly clear",
     de: "Fast klar",
     da: "Mest klart",
+    nl: "Vrijwel helder",
+    no: "Stort sett klart",
   },
   partly_cloudy: {
     sv: "Halvklart",
     en: "Partly cloudy",
     de: "Teilweise bewölkt",
     da: "Delvis skyet",
+    nl: "Half bewolkt",
+    no: "Delvis skyet",
   },
-  cloudy: { sv: "Molnigt", en: "Cloudy", de: "Bewölkt", da: "Skyet" },
-  overcast: { sv: "Mulet", en: "Overcast", de: "Bedeckt", da: "Overskyet" },
-  fog: { sv: "Dimma", en: "Fog", de: "Nebel", da: "Tåge" },
-  rain: { sv: "Regn", en: "Rain", de: "Regen", da: "Regn" },
+  cloudy: {
+    sv: "Molnigt",
+    en: "Cloudy",
+    de: "Bewölkt",
+    da: "Skyet",
+    nl: "Bewolkt",
+    no: "Skyet",
+  },
+  overcast: {
+    sv: "Mulet",
+    en: "Overcast",
+    de: "Bedeckt",
+    da: "Overskyet",
+    nl: "Betrokken",
+    no: "Overskyet",
+  },
+  fog: {
+    sv: "Dimma",
+    en: "Fog",
+    de: "Nebel",
+    da: "Tåge",
+    nl: "Mist",
+    no: "Tåke",
+  },
+  rain: {
+    sv: "Regn",
+    en: "Rain",
+    de: "Regen",
+    da: "Regn",
+    nl: "Regen",
+    no: "Regn",
+  },
   light_rain: {
     sv: "Lätt regn",
     en: "Light rain",
     de: "Leichter Regen",
     da: "Let regn",
+    nl: "Lichte regen",
+    no: "Lett regn",
   },
-  snow: { sv: "Snö", en: "Snow", de: "Schnee", da: "Sne" },
-  sleet: { sv: "Slask", en: "Sleet", de: "Schneeregen", da: "Slud" },
+  snow: {
+    sv: "Snö",
+    en: "Snow",
+    de: "Schnee",
+    da: "Sne",
+    nl: "Sneeuw",
+    no: "Snø",
+  },
+  sleet: {
+    sv: "Slask",
+    en: "Sleet",
+    de: "Schneeregen",
+    da: "Slud",
+    nl: "Natte sneeuw",
+    no: "Sludd",
+  },
 };
 
 const weatherConditions: Record<Lang, { rain: string; calm: string }> = {
@@ -113,6 +186,8 @@ const weatherConditions: Record<Lang, { rain: string; calm: string }> = {
   en: { rain: "Rain", calm: "Calm" },
   de: { rain: "Regen", calm: "Ruhig" },
   da: { rain: "Regn", calm: "Roligt" },
+  nl: { rain: "Regen", calm: "Rustig" },
+  no: { rain: "Regn", calm: "Rolig" },
 };
 
 const feelLabels: Record<Lang, { warm: string; nice: string; cool: string }> = {
@@ -120,6 +195,8 @@ const feelLabels: Record<Lang, { warm: string; nice: string; cool: string }> = {
   en: { warm: "Warm", nice: "Pleasant", cool: "Cool" },
   de: { warm: "Warm", nice: "Angenehm", cool: "Kühl" },
   da: { warm: "Varmt", nice: "Behageligt", cool: "Køligt" },
+  nl: { warm: "Warm", nice: "Aangenaam", cool: "Koel" },
+  no: { warm: "Varmt", nice: "Behagelig", cool: "Kjølig" },
 };
 
 export default function GuestAppUI({
@@ -129,6 +206,7 @@ export default function GuestAppUI({
   partners = [],
   weather = null,
   distanceMap = {},
+  internalLocations = [],
 }: {
   campground: Campground;
   places: CachedPlace[];
@@ -136,6 +214,7 @@ export default function GuestAppUI({
   partners?: PromotedPartner[];
   weather?: WeatherProp | null;
   distanceMap?: RoadDistanceMap;
+  internalLocations?: InternalLocation[];
 }) {
   const [activeTab, setActiveTab] = useState<TabId>("puls");
   const [lang, setLang] = useState<Lang>("sv");
@@ -159,6 +238,30 @@ export default function GuestAppUI({
   useEffect(() => {
     setCurrentHour(new Date().getHours());
   }, []);
+
+  const sessionIdRef = useRef(
+    typeof window !== "undefined"
+      ? (sessionStorage.getItem("campSID") ??
+          (() => {
+            const id = generateId();
+            sessionStorage.setItem("campSID", id);
+            return id;
+          })())
+      : "",
+  );
+
+  useEffect(() => {
+    if (!campground.id || !sessionIdRef.current) return;
+    trackPageView(campground.id, sessionIdRef.current, activeTab);
+  }, [activeTab, campground.id]);
+
+  const handleDirectionsClick = useCallback(
+    (placeId: string) => {
+      if (!campground.id || !sessionIdRef.current) return;
+      trackDirectionsClick(campground.id, placeId, sessionIdRef.current);
+    },
+    [campground.id],
+  );
 
   const welcomeLabel: Record<Lang, string> = {
     sv:
@@ -185,6 +288,18 @@ export default function GuestAppUI({
         : currentHour < 17
           ? "Velkommen till"
           : "God aften på",
+    nl:
+      currentHour < 10
+        ? "Goedemorgen bij"
+        : currentHour < 17
+          ? "Welkom bij"
+          : "Goedenavond bij",
+    no:
+      currentHour < 10
+        ? "God morgen på"
+        : currentHour < 17
+          ? "Velkommen til"
+          : "God kveld på",
   };
 
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -206,25 +321,17 @@ export default function GuestAppUI({
     scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
-  // ── NEW: Prefetch AI plan for all languages on mount ──
-  // Waits for weather so we don't generate with defaults
-  // then regenerate when real weather arrives. Fire-and-
-  // forget — silent failure is fine, the planner tab falls
-  // back to on-demand generation via getAiPlan.
   const prefetchedKey = useRef<string>("");
 
   useEffect(() => {
     if (!visiblePlaces.length || !weather) return;
-
     const key = `${campground.id}-${weather.temp}-${weather.isRaining}-${weather.windSpeed}`;
     if (prefetchedKey.current === key) return;
     prefetchedKey.current = key;
-
     prefetchAiPlan(campground, weather, visiblePlaces, distanceMap).catch(
       () => {},
     );
   }, [campground, weather, visiblePlaces, distanceMap]);
-  // ── END NEW ───────────────────────────────────────────
 
   return (
     <>
@@ -285,8 +392,6 @@ export default function GuestAppUI({
               className="absolute inset-0"
               style={{ backgroundColor: brand }}
             />
-
-            {/* HERO IMAGE with FOCAL POINT support */}
             <img
               src={heroImage}
               alt=""
@@ -299,7 +404,6 @@ export default function GuestAppUI({
                 e.currentTarget.style.display = "none";
               }}
             />
-
             <div
               className="absolute inset-0 mix-blend-multiply opacity-35"
               style={{ backgroundColor: brand }}
@@ -387,6 +491,8 @@ export default function GuestAppUI({
                     weather={weather}
                     lang={lang}
                     distanceMap={distanceMap}
+                    internalLocations={internalLocations}
+                    onDirectionsClick={handleDirectionsClick}
                   />
                 )}
                 {activeTab === "utforska" && (
@@ -395,6 +501,7 @@ export default function GuestAppUI({
                     places={visiblePlaces}
                     lang={lang}
                     distanceMap={distanceMap}
+                    onDirectionsClick={handleDirectionsClick}
                   />
                 )}
                 {activeTab === "planerare" && (
@@ -419,9 +526,17 @@ export default function GuestAppUI({
                 )}
               </motion.div>
             </AnimatePresence>
+
+            <GuestFeedbackWidget
+              campgroundId={campground.id}
+              sessionId={sessionIdRef.current}
+              brand={brand}
+              lang={lang}
+            />
           </main>
         </div>
 
+        {/* ★ FIX: grid grid-cols-5 instead of flex justify-around */}
         <nav
           className="relative z-30 shrink-0 border-t border-stone-200/40 bg-white/95 backdrop-blur-2xl"
           style={{
@@ -431,7 +546,7 @@ export default function GuestAppUI({
           }}
         >
           <div className="px-3 pb-1.5 pt-1.5">
-            <div className="flex items-end justify-around">
+            <div className="grid grid-cols-5 items-end">
               <NavBtn
                 id="utforska"
                 active={activeTab === "utforska"}
@@ -509,7 +624,6 @@ function PWAMeta({ brand }: { brand: string }) {
       document.head.appendChild(metaTheme);
     }
     metaTheme.setAttribute("content", brand);
-
     let metaCapable = document.querySelector(
       'meta[name="apple-mobile-web-app-capable"]',
     );
@@ -519,7 +633,6 @@ function PWAMeta({ brand }: { brand: string }) {
       metaCapable.setAttribute("content", "yes");
       document.head.appendChild(metaCapable);
     }
-
     let metaStatus = document.querySelector(
       'meta[name="apple-mobile-web-app-status-bar-style"]',
     );
@@ -529,7 +642,6 @@ function PWAMeta({ brand }: { brand: string }) {
       metaStatus.setAttribute("content", "black-translucent");
       document.head.appendChild(metaStatus);
     }
-
     document.body.style.overscrollBehavior = "none";
     document.documentElement.style.overscrollBehavior = "none";
     return () => {
@@ -549,7 +661,7 @@ function LangSwitcher({
 }) {
   return (
     <div className="flex w-fit rounded-full bg-black/16 p-[3px] backdrop-blur-xl ring-1 ring-white/[0.06]">
-      {(["sv", "en", "de", "da"] as Lang[]).map((l) => (
+      {(["sv", "en", "de", "da", "nl", "no"] as Lang[]).map((l) => (
         <motion.button
           key={l}
           onClick={() => setLang(l)}
@@ -575,6 +687,7 @@ function LangSwitcher({
   );
 }
 
+/* ★ FIX: added w-full so button fills its grid cell, content stays centered */
 function NavBtn({
   id,
   active,
@@ -593,7 +706,7 @@ function NavBtn({
   return (
     <motion.button
       onClick={() => onClick(id)}
-      className="relative flex flex-col items-center gap-0.5 py-1.5"
+      className="relative flex w-full flex-col items-center gap-0.5 py-1.5"
       whileTap={{ scale: 0.85 }}
       transition={SPRING_SNAP}
     >

@@ -13,6 +13,9 @@ import { PlaceCategory } from "@/types/database";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getOSRMTableMetrics, type Coordinate } from "./routing";
 
+interface GooglePlacesResponse {
+  places?: any[];
+}
 export interface GooglePlaceResult {
   google_place_id: string;
   name: string;
@@ -263,7 +266,7 @@ export async function fetchPlacesNearby(
         body: JSON.stringify(body),
       },
     );
-    const data = await res.json();
+    const data = (await res.json()) as GooglePlacesResponse;
     if (!data.places) return [];
     return parsePlaces(data.places, categoryFallback);
   } catch (err) {
@@ -316,7 +319,7 @@ export async function fetchPlacesByText(
         body: JSON.stringify(body),
       },
     );
-    const data = await res.json();
+    const data = (await res.json()) as GooglePlacesResponse;
     if (!data.places) return [];
     return parsePlaces(data.places, categoryFallback);
   } catch (err) {
