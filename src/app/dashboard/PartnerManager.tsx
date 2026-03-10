@@ -7,10 +7,8 @@ import type {
   PromotedPartnerWithClicks,
 } from "@/types/database";
 import {
-  Calendar,
   Check,
   Edit3,
-  ExternalLink,
   Eye,
   EyeOff,
   Globe,
@@ -21,7 +19,7 @@ import {
   Plus,
   Search,
   Trash2,
-  X,
+  X
 } from "lucide-react";
 import React, { useMemo, useState, useTransition } from "react";
 import {
@@ -179,8 +177,11 @@ export default function PartnerManager({
           logo_url: newLogoUrl.trim() || undefined,
           cached_place_id: newPlaceId || undefined,
           priority_rank: newRank,
-          starts_at: newStartsAt || undefined,
-          ends_at: newEndsAt || undefined,
+          // FIX: Konvertera till korrekt ISO-format för server-validering
+          starts_at: newStartsAt
+            ? new Date(newStartsAt).toISOString()
+            : undefined,
+          ends_at: newEndsAt ? new Date(newEndsAt).toISOString() : undefined,
         });
         resetAddForm();
       } catch (e: any) {
@@ -199,6 +200,7 @@ export default function PartnerManager({
     setEditLogoUrl(p.logo_url || "");
     setEditPlaceId(p.cached_place_id || "");
     setEditRank(p.priority_rank);
+    // För datetime-local input krävs formatet YYYY-MM-DDTHH:MM
     setEditStartsAt(p.starts_at ? p.starts_at.slice(0, 16) : "");
     setEditEndsAt(p.ends_at ? p.ends_at.slice(0, 16) : "");
   };
@@ -215,8 +217,11 @@ export default function PartnerManager({
           logo_url: editLogoUrl.trim() || undefined,
           cached_place_id: editPlaceId || null,
           priority_rank: editRank,
-          starts_at: editStartsAt || undefined,
-          ends_at: editEndsAt || null,
+          // FIX: Konvertera till korrekt ISO-format för server-validering
+          starts_at: editStartsAt
+            ? new Date(editStartsAt).toISOString()
+            : undefined,
+          ends_at: editEndsAt ? new Date(editEndsAt).toISOString() : null,
         });
         setEditingId(null);
       } catch (e: any) {
@@ -376,19 +381,6 @@ export default function PartnerManager({
             { "--tw-ring-color": hexToRgba(brand, 0.25) } as React.CSSProperties
           }
         />
-        {opts.logoUrl && (
-          <div className="mt-2 flex items-center gap-2">
-            <div className="h-8 w-8 overflow-hidden rounded-[6px] bg-stone-50 ring-1 ring-stone-200/60">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={opts.logoUrl}
-                alt="Preview"
-                className="h-full w-full object-cover"
-              />
-            </div>
-            <span className="text-[10px] text-stone-300">Förhandsvisning</span>
-          </div>
-        )}
       </div>
 
       {/* Link to existing place */}
@@ -640,7 +632,6 @@ export default function PartnerManager({
               const live = isCurrentlyActive(partner);
               const isEditing = editingId === partner.id;
 
-              // ── EDIT MODE ──
               if (isEditing) {
                 return (
                   <div
@@ -673,7 +664,6 @@ export default function PartnerManager({
                 );
               }
 
-              // ── DISPLAY MODE ──
               return (
                 <div
                   key={partner.id}
@@ -682,10 +672,8 @@ export default function PartnerManager({
                   } ${busy ? "opacity-40" : ""}`}
                 >
                   <div className="flex items-start gap-3">
-                    {/* Logo */}
                     <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-[10px] bg-stone-50 ring-1 ring-stone-200/60">
                       {partner.logo_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={partner.logo_url}
                           alt={partner.business_name}
@@ -696,14 +684,11 @@ export default function PartnerManager({
                       )}
                     </div>
 
-                    {/* Content */}
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <h4 className="truncate text-[12px] font-bold text-stone-800">
                           {partner.business_name}
                         </h4>
-
-                        {/* Status badges */}
                         {live && (
                           <span
                             className="rounded-full px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.15em]"
@@ -736,12 +721,6 @@ export default function PartnerManager({
                             #{partner.priority_rank}
                           </span>
                         )}
-                        {partner.linked_place_name && (
-                          <span className="flex items-center gap-0.5 rounded-full bg-blue-50 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.15em] text-blue-500">
-                            <Link2 size={8} />
-                            Länkad
-                          </span>
-                        )}
                       </div>
 
                       {partner.description && (
@@ -750,41 +729,6 @@ export default function PartnerManager({
                         </p>
                       )}
 
-                      {/* Meta row */}
-                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                        {partner.website_url && (
-                          <span className="flex items-center gap-1 text-[10px] text-stone-300">
-                            <Globe size={9} className="shrink-0" />
-                            <span className="truncate font-medium">
-                              {partner.website_url.replace(
-                                /^https?:\/\/(www\.)?/,
-                                "",
-                              )}
-                            </span>
-                          </span>
-                        )}
-                        {partner.phone && (
-                          <span className="flex items-center gap-1 text-[10px] text-stone-300">
-                            <Phone size={9} className="shrink-0" />
-                            <span className="font-medium">{partner.phone}</span>
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Date range */}
-                      {(partner.starts_at || partner.ends_at) && (
-                        <div className="mt-1 flex items-center gap-1 text-[9px] text-stone-300">
-                          <Calendar size={9} className="shrink-0" />
-                          <span>
-                            {formatDate(partner.starts_at)}
-                            {partner.ends_at
-                              ? ` → ${formatDate(partner.ends_at)}`
-                              : " → Tillsvidare"}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Click stats */}
                       <div className="mt-2">
                         <div
                           className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1"
@@ -808,22 +752,8 @@ export default function PartnerManager({
                       </div>
                     </div>
 
-                    {/* Actions */}
                     <div className="flex shrink-0 flex-col items-center gap-0.5 sm:flex-row">
-                      {partner.website_url && (
-                        <a
-                          href={partner.website_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex h-7 w-7 items-center justify-center rounded-full text-stone-300 transition-all hover:bg-stone-50 hover:text-stone-500 active:scale-90"
-                          title="Besök"
-                        >
-                          <ExternalLink size={13} />
-                        </a>
-                      )}
-
                       <button
-                        title={partner.is_active ? "Inaktivera" : "Aktivera"}
                         onClick={() =>
                           withAction(partner.id, () =>
                             togglePromotedPartnerActive(
@@ -834,14 +764,6 @@ export default function PartnerManager({
                         }
                         disabled={busy}
                         className="flex h-7 w-7 items-center justify-center rounded-full text-stone-300 transition-all hover:bg-stone-50 hover:text-stone-500 active:scale-90 disabled:opacity-40"
-                        style={
-                          !partner.is_active
-                            ? {
-                                backgroundColor: hexToRgba(brand, 0.08),
-                                color: brand,
-                              }
-                            : undefined
-                        }
                       >
                         {partner.is_active ? (
                           <EyeOff size={13} />
@@ -851,7 +773,6 @@ export default function PartnerManager({
                       </button>
 
                       <button
-                        title="Redigera"
                         onClick={() => handleStartEdit(partner)}
                         disabled={busy}
                         className="flex h-7 w-7 items-center justify-center rounded-full text-stone-300 transition-all hover:bg-stone-50 hover:text-stone-500 active:scale-90 disabled:opacity-40"
@@ -860,7 +781,6 @@ export default function PartnerManager({
                       </button>
 
                       <button
-                        title="Ta bort"
                         onClick={() =>
                           handleDelete(partner.id, partner.business_name)
                         }
@@ -878,15 +798,10 @@ export default function PartnerManager({
         ) : (
           <div className="rounded-[20px] bg-white px-6 py-8 text-center ring-1 ring-stone-200/60">
             <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-stone-50 ring-1 ring-stone-200/60">
-              <span className="text-lg">🤝</span>
+              🤝
             </div>
             <p className="text-[13px] font-black tracking-tight text-stone-700">
               {search ? "Inga träffar" : "Inga sponsrade partners ännu"}
-            </p>
-            <p className="mx-auto mt-1 max-w-[240px] text-[11px] leading-relaxed text-stone-400">
-              {search
-                ? "Prova ett annat sökord."
-                : "Lägg till lokala samarbetspartners — varje klick spåras automatiskt och blir ett säljargument."}
             </p>
           </div>
         )}

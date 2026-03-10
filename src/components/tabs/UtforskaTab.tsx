@@ -25,33 +25,107 @@ function hexToRgba(hex: string, alpha: number): string {
 }
 
 const SPRING_TAP = { type: "spring" as const, stiffness: 440, damping: 24 };
-const staggerContainer = { animate: { transition: { staggerChildren: 0.05 } } };
+const staggerContainer = {
+  animate: { transition: { staggerChildren: 0.05 } },
+};
 const staggerItem = {
   initial: { opacity: 0, y: 8 },
   animate: { opacity: 1, y: 0, transition: SPRING_TAP },
 };
 
-const CATEGORY_IMAGES: Record<string, string> = {
-  beach:
-    "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=500&q=80",
-  cafe: "https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=500&q=80",
-  swimming:
-    "https://images.unsplash.com/photo-1576013551627-0cc20b96c2a7?w=500&q=80",
-  park: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=500&q=80",
-  restaurant:
-    "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=500&q=80",
-  shopping:
-    "https://images.unsplash.com/photo-1604719312566-8912e9227c6a?w=500&q=80",
-  bowling:
-    "https://images.unsplash.com/photo-1545232979-8bf68ee9b1af?w=500&q=80",
-  museum:
-    "https://images.unsplash.com/photo-1554907984-15263bfd63bd?w=500&q=80",
-  cinema:
-    "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=500&q=80",
-  spa: "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=500&q=80",
-  other:
-    "https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=500&q=80",
+// ─── Category visuals ───────────────────────────────────
+//
+// Uses raw hex colors in inline styles — no dynamic Tailwind
+// class composition, so gradients render on every browser
+// including Safari and iOS WebKit.
+
+interface CategoryStyle {
+  colors: [string, string, string]; // start, mid, end
+  emoji: string;
+  dotColor: string;
+}
+
+const CATEGORY_STYLES: Record<string, CategoryStyle> = {
+  beach: {
+    colors: ["#bae6fd", "#a5f3fc", "#eff6ff"],
+    emoji: "🏖️",
+    dotColor: "#7dd3fc",
+  },
+  cafe: {
+    colors: ["#fde68a", "#fed7aa", "#fefce8"],
+    emoji: "☕",
+    dotColor: "#fcd34d",
+  },
+  swimming: {
+    colors: ["#bfdbfe", "#e0f2fe", "#ecfeff"],
+    emoji: "🏊",
+    dotColor: "#93c5fd",
+  },
+  spa: {
+    colors: ["#ddd6fe", "#e9d5ff", "#fdf4ff"],
+    emoji: "🧖",
+    dotColor: "#c4b5fd",
+  },
+  restaurant: {
+    colors: ["#fecdd3", "#fee2e2", "#fff7ed"],
+    emoji: "🍽️",
+    dotColor: "#fda4af",
+  },
+  park: {
+    colors: ["#a7f3d0", "#bbf7d0", "#f7fee7"],
+    emoji: "🌲",
+    dotColor: "#6ee7b7",
+  },
+  museum: {
+    colors: ["#cbd5e1", "#dbeafe", "#eef2ff"],
+    emoji: "🏛️",
+    dotColor: "#94a3b8",
+  },
+  bowling: {
+    colors: ["#d8b4fe", "#ddd6fe", "#fdf4ff"],
+    emoji: "🎳",
+    dotColor: "#c084fc",
+  },
+  cinema: {
+    colors: ["#a5b4fc", "#ddd6fe", "#faf5ff"],
+    emoji: "🎬",
+    dotColor: "#818cf8",
+  },
+  shopping: {
+    colors: ["#99f6e4", "#a7f3d0", "#f0fdf4"],
+    emoji: "🛍️",
+    dotColor: "#5eead4",
+  },
+  other: {
+    colors: ["#d6d3d1", "#e7e5e4", "#fafaf9"],
+    emoji: "📍",
+    dotColor: "#a8a29e",
+  },
 };
+
+function getCategoryStyle(category: string): CategoryStyle {
+  return CATEGORY_STYLES[category] ?? CATEGORY_STYLES.other;
+}
+
+/**
+ * Gradient angle varies per card based on the place ID hash.
+ * Prevents adjacent cards from looking identical.
+ */
+const GRADIENT_ANGLES = [135, 90, 45, 180];
+
+function gradientAngle(id: string): number {
+  const hash = id.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
+  return GRADIENT_ANGLES[hash % GRADIENT_ANGLES.length];
+}
+
+function buildGradientCSS(
+  colors: [string, string, string],
+  angle: number,
+): string {
+  return `linear-gradient(${angle}deg, ${colors[0]}, ${colors[1]}, ${colors[2]})`;
+}
+
+// ─── Row definitions ────────────────────────────────────
 
 const ROW_DEFS = [
   {
@@ -126,7 +200,8 @@ const ROW_DEFS = [
   },
 ] as const;
 
-/* ── Labels — use interface instead of const to avoid literal type issues ── */
+/* ── Labels ──────────────────────────────────────────── */
+
 interface Labels {
   hitaHit: string;
   originalLang: string;
@@ -191,6 +266,8 @@ const labels: Record<Lang, Labels> = {
   },
 };
 
+/* ── Component ───────────────────────────────────────── */
+
 interface Props {
   campground: Campground;
   places: CachedPlace[];
@@ -238,7 +315,14 @@ export default function UtforskaTab({
           </span>
         </div>
 
-        <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2 scrollbar-hide snap-x snap-mandatory">
+        <div
+          className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2 snap-x snap-mandatory"
+          style={{
+            WebkitOverflowScrolling: "touch",
+            scrollbarWidth: "none",
+            msOverflowStyle: "none",
+          }}
+        >
           {filtered.map((place) => (
             <PlaceCard
               key={place.id}
@@ -274,6 +358,8 @@ export default function UtforskaTab({
   );
 }
 
+/* ── Place Card ──────────────────────────────────────── */
+
 function PlaceCard({
   place,
   campground,
@@ -291,7 +377,8 @@ function PlaceCard({
   isSwedish: boolean;
   distance: string;
 }) {
-  const imgUrl = CATEGORY_IMAGES[place.category] ?? CATEGORY_IMAGES.other;
+  const catStyle = getCategoryStyle(place.category);
+  const angle = gradientAngle(place.id);
   const hoursData = getTodaysOpeningHours(place.raw_data);
 
   let hoursDisplay: {
@@ -333,7 +420,7 @@ function PlaceCard({
     }
   }
 
-  // --- NEW ROUTING LOGIC STARTS HERE ---
+  // Navigation logic (unchanged)
   const hasCoordinates = Boolean(place.latitude && place.longitude);
   const hasAddress = Boolean(place.address);
   const canNavigate = hasCoordinates || hasAddress;
@@ -344,51 +431,134 @@ function PlaceCard({
   } else if (hasAddress) {
     mapLink = `https://maps.google.com/?q=${encodeURIComponent(place.address!)}`;
   }
-  // --- NEW ROUTING LOGIC ENDS HERE ---
 
   return (
     <motion.div
-      className="flex w-[240px] shrink-0 snap-start flex-col overflow-hidden rounded-[32px] bg-white ring-1 ring-stone-200/60"
+      className="flex w-[240px] shrink-0 snap-start flex-col overflow-hidden rounded-[24px] bg-white ring-1 ring-stone-200/60"
       whileTap={{ scale: 0.97 }}
       transition={SPRING_TAP}
     >
-      <div className="relative aspect-[4/3] w-full overflow-hidden">
-        <img src={imgUrl} alt="" className="h-full w-full object-cover" />
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
+      {/* ── Gradient header ────────────────────────── */}
+      <div
+        className="relative flex items-center justify-center overflow-hidden"
+        style={{
+          height: "112px",
+          background: buildGradientCSS(catStyle.colors, angle),
+        }}
+      >
+        {/* Decorative background emoji — large, top-right */}
+        <span
+          className="absolute select-none leading-none"
+          style={{
+            fontSize: "72px",
+            right: "-12px",
+            top: "-12px",
+            opacity: 0.06,
+            transform: "rotate(15deg)",
+            pointerEvents: "none",
+          }}
+        >
+          {catStyle.emoji}
+        </span>
+
+        {/* Decorative background emoji — medium, bottom-left */}
+        <span
+          className="absolute select-none leading-none"
+          style={{
+            fontSize: "48px",
+            left: "-12px",
+            bottom: "-8px",
+            opacity: 0.05,
+            transform: "rotate(-12deg)",
+            pointerEvents: "none",
+          }}
+        >
+          {catStyle.emoji}
+        </span>
+
+        {/* Bottom fade for smooth transition to white body */}
+        <div
+          className="absolute inset-x-0 bottom-0"
+          style={{
+            height: "24px",
+            background:
+              "linear-gradient(to top, rgba(255,255,255,0.3), transparent)",
+            pointerEvents: "none",
+          }}
+        />
+
+        {/* Main emoji */}
+        <span className="relative" style={{ fontSize: "36px", zIndex: 1 }}>
+          {catStyle.emoji}
+        </span>
+
+        {/* Pinned / Staff pick badge */}
         {place.is_pinned && (
           <span
-            className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.15em] text-white backdrop-blur-md"
-            style={{ backgroundColor: hexToRgba(brand, 0.75) }}
+            className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-white"
+            style={{
+              fontSize: "9px",
+              fontWeight: 900,
+              letterSpacing: "0.15em",
+              textTransform: "uppercase",
+              backgroundColor: hexToRgba(brand, 0.75),
+              backdropFilter: "blur(12px)",
+              WebkitBackdropFilter: "blur(12px)",
+              zIndex: 2,
+            }}
           >
             <Star size={9} fill="currentColor" />
             {l.staffPick}
           </span>
         )}
+
+        {/* Rating badge */}
         {place.rating != null && (
-          <span className="absolute bottom-3 right-3 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-black text-stone-800 ring-1 ring-stone-200/60 backdrop-blur-sm">
+          <span
+            className="absolute bottom-3 right-3 inline-flex items-center gap-1 rounded-full ring-1 ring-stone-200/60"
+            style={{
+              fontSize: "10px",
+              fontWeight: 900,
+              color: "#292524",
+              backgroundColor: "rgba(255,255,255,0.9)",
+              padding: "2px 8px",
+              backdropFilter: "blur(4px)",
+              WebkitBackdropFilter: "blur(4px)",
+              zIndex: 2,
+            }}
+          >
             <Star size={9} fill="#F59E0B" className="text-amber-500" />
             {place.rating.toFixed(1)}
           </span>
         )}
       </div>
 
+      {/* ── Card body ──────────────────────────────── */}
       <div className="flex flex-1 flex-col p-4">
         <h4 className="line-clamp-1 text-[14px] font-black leading-tight tracking-tight text-stone-800">
           {place.name}
         </h4>
 
-        <div className="mt-2.5 flex flex-col gap-1.5">
-          {distance && (
+        {/* Meta pills */}
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+          {place.is_on_site ? (
+            <MetaPill>
+              <MapPin size={9} className="text-emerald-500" />
+              {l.onSite}
+            </MetaPill>
+          ) : distance ? (
             <MetaPill>
               <MapPin size={9} className="text-stone-400" />
               {distance}
             </MetaPill>
-          )}
+          ) : null}
+
           {hoursDisplay && (
-            <div className="flex items-center gap-1.5">
+            <>
               <MetaPill>
                 <span
-                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${hoursDisplay.dotColor}`}
+                  className={`shrink-0 rounded-full ${hoursDisplay.dotColor}`}
+                  style={{ width: "6px", height: "6px" }}
                 />
                 {hoursDisplay.statusText}
               </MetaPill>
@@ -399,10 +569,11 @@ function PlaceCard({
                     {hoursDisplay.text}
                   </MetaPill>
                 )}
-            </div>
+            </>
           )}
         </div>
 
+        {/* Owner note */}
         {place.owner_note && (
           <div
             className="mt-3 rounded-[14px] px-3 py-2.5"
@@ -422,15 +593,15 @@ function PlaceCard({
                   </span>
                 )}
                 <p className="line-clamp-2 text-[11px] font-medium italic leading-relaxed text-stone-500">
-                  “{place.owner_note}”
+                  &ldquo;{place.owner_note}&rdquo;
                 </p>
               </div>
             </div>
           </div>
         )}
 
+        {/* Action button */}
         <div className="mt-auto pt-4">
-          {/* --- NEW BUTTON RENDERING STARTS HERE --- */}
           {canNavigate ? (
             <motion.a
               href={mapLink}
@@ -451,18 +622,22 @@ function PlaceCard({
           ) : place.is_on_site ? (
             <div
               className="flex w-full items-center justify-center gap-2 rounded-full py-3 text-[11px] font-black uppercase tracking-[0.1em]"
-              style={{ backgroundColor: hexToRgba(brand, 0.08), color: brand }}
+              style={{
+                backgroundColor: hexToRgba(brand, 0.08),
+                color: brand,
+              }}
             >
               <MapPin size={13} strokeWidth={2.5} />
               {l.onSite}
             </div>
           ) : null}
-          {/* --- NEW BUTTON RENDERING ENDS HERE --- */}
         </div>
       </div>
     </motion.div>
   );
 }
+
+/* ── Meta Pill ───────────────────────────────────────── */
 
 function MetaPill({ children }: { children: React.ReactNode }) {
   return (
@@ -471,6 +646,8 @@ function MetaPill({ children }: { children: React.ReactNode }) {
     </span>
   );
 }
+
+/* ── Empty State ─────────────────────────────────────── */
 
 function EmptyState({ title, subtitle }: { title: string; subtitle: string }) {
   return (

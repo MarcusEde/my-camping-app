@@ -96,10 +96,10 @@ function getGoogleMapsLink(
   address?: string | null,
 ): string | null {
   if (lat && lng) {
-    return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+    return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
   }
   if (address) {
-    return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
   }
   return null;
 }
@@ -244,7 +244,7 @@ const t: Record<
     noNotices: "Ingen opslag lige nu",
     noNoticesSub: "Nyd roen — vi giver besked!",
     showWay: "Find vej",
-    callReception: "Ring til receptionen",
+    callReception: "Ring till receptionen",
     callSub: "Vi hjælper gerne",
     findReception: "Find os",
     findSub: "Vejbeskrivelse",
@@ -427,18 +427,19 @@ export default function PulsTab({
             </div>
             <div className="min-w-0 flex-1">
               {hasWifiName && hasWifiPassword ? (
-                <div className="flex items-baseline gap-3">
-                  <span className="truncate text-[13px] font-bold text-stone-800">
+                /* Updated: uses flex-wrap and adjusted gaps for mobile displays */
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <span className="text-[13px] font-bold text-stone-800">
                     {campground.wifi_name}
                   </span>
-                  <span className="text-stone-300">·</span>
+                  <span className="hidden text-stone-300 sm:inline">·</span>
                   <code className="font-mono text-[13px] font-black text-stone-800">
                     {campground.wifi_password}
                   </code>
                 </div>
               ) : hasWifiName ? (
-                <div className="flex items-center gap-2">
-                  <span className="truncate text-[13px] font-bold text-stone-800">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[13px] font-bold text-stone-800">
                     {campground.wifi_name}
                   </span>
                   <span className="flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.15em] text-stone-400">

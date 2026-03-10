@@ -19,9 +19,44 @@ import React, { useMemo } from "react";
 import type { Lang } from "../GuestAppUI";
 import { trackPartnerClick } from "./actions";
 
-/* ═══════════════════════════════════════════════════════
-   Utility
-   ═══════════════════════════════════════════════════════ */
+/* ── Translation helpers ─────────────────────────────── */
+
+/**
+ * Hämtar översatt text för anslag (evenemang).
+ */
+function getAnnouncementText(
+  ann: Announcement,
+  lang: Lang,
+): { title: string; content: string } {
+  if (lang === "sv") return { title: ann.title, content: ann.content };
+  const tr = ann.translations?.[lang as "en" | "de" | "da"];
+  return {
+    title: tr?.title || ann.title,
+    content: tr?.content || ann.content,
+  };
+}
+
+/**
+ * Hämtar översatt text för partners.
+ * FIX: Säkerställer att undefined konverteras till null för att matcha returtypen.
+ */
+function getPartnerText(
+  partner: PromotedPartner,
+  lang: Lang,
+): { name: string; description: string | null } {
+  if (lang === "sv")
+    return {
+      name: partner.business_name,
+      description: partner.description ?? null,
+    };
+  const tr = partner.translations?.[lang as "en" | "de" | "da"];
+  return {
+    name: tr?.business_name || partner.business_name,
+    description: tr?.description || partner.description || null,
+  };
+}
+
+/* ── Physics ─────────────────────────────────────────── */
 function hexToRgba(hex: string, alpha: number): string {
   const clean = hex.replace("#", "");
   const r = parseInt(clean.slice(0, 2), 16);
@@ -40,6 +75,7 @@ const staggerItem = {
   animate: { opacity: 1, y: 0, transition: SPRING_TAP },
 };
 
+/* ── UI Translations ─────────────────────────────────── */
 const t: Record<
   Lang,
   {
@@ -99,9 +135,9 @@ const t: Record<
     events: "Events & Begivenheder",
     partners: "Lokale oplevelser",
     noEvents: "Ingen begivenheder lige nu",
-    noEventsSub: "Hold øje — der sker altid noget nyt!",
+    noEventsSub: "Hold øje — der sker alltid noget nyt!",
     noPartners: "Ingen partnere lige nu",
-    noPartnersSub: "Vi arbejder på at finde oplevelser til dig!",
+    noPartnersSub: "Vi arbejder på at finde oplevelser till dig!",
     featured: "Anbefalet",
     book: "Book",
     call: "Ring",
@@ -247,6 +283,8 @@ function EventCard({
   isSwedish: boolean;
   originalLabel: string;
 }) {
+  const { title, content } = getAnnouncementText(event, lang);
+
   const dateLocale =
     lang === "sv"
       ? "sv-SE"
@@ -278,10 +316,10 @@ function EventCard({
       </div>
 
       <h4 className="text-[14px] font-black leading-tight tracking-tight text-stone-800">
-        {event.title}
+        {title}
       </h4>
       <p className="mt-1.5 text-[12px] font-medium leading-relaxed text-stone-400">
-        {event.content}
+        {content}
       </p>
 
       {!isSwedish && (
@@ -296,6 +334,7 @@ function EventCard({
 function PartnerCard({
   partner,
   brand,
+  lang,
   isSwedish,
   labels,
 }: {
@@ -306,11 +345,11 @@ function PartnerCard({
   labels: (typeof t)["sv"];
 }) {
   const isFeatured = partner.priority_rank === 1;
+  const { name, description } = getPartnerText(partner, lang);
 
   /* ── Click handler — tracks then navigates ── */
   const handleWebsiteClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    // Fire-and-forget: don't await, don't block navigation
     trackPartnerClick(partner.id);
     if (partner.website_url) {
       window.open(partner.website_url, "_blank", "noopener,noreferrer");
@@ -354,32 +393,40 @@ function PartnerCard({
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px]"
             style={{ backgroundColor: hexToRgba(brand, 0.05), color: brand }}
           >
-            <Store size={18} strokeWidth={2} />
+            {partner.logo_url ? (
+              <img
+                src={partner.logo_url}
+                alt={name}
+                className="h-full w-full object-cover rounded-[14px]"
+              />
+            ) : (
+              <Store size={18} strokeWidth={2} />
+            )}
           </div>
           <h4 className="text-[14px] font-black leading-tight tracking-tight text-stone-800">
-            {partner.business_name}
+            {name}
           </h4>
         </div>
 
         {/* Description */}
-        {partner.description && (
+        {description && (
           <div
             className="mb-3 rounded-[14px] px-3.5 py-2.5"
             style={{ backgroundColor: hexToRgba(brand, 0.03) }}
           >
             <p className="text-[12px] font-medium italic leading-relaxed text-stone-500">
-              &ldquo;{partner.description}&rdquo;
+              &ldquo;{description}&rdquo;
             </p>
           </div>
         )}
 
-        {!isSwedish && partner.description && (
+        {!isSwedish && description && (
           <span className="mb-3 inline-block rounded-full bg-stone-50 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-[0.2em] text-stone-300 ring-1 ring-stone-200/60">
             {labels.originalLang}
           </span>
         )}
 
-        {/* CTAs — now with click tracking */}
+        {/* CTAs */}
         <div className="flex gap-2">
           {partner.website_url ? (
             <motion.a

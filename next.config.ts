@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
       allowedOrigins: [
+        "my-camping-app.pages.dev", // <--- Add this (or your specific project name)
         "my-camping-app.marcus-edevag.workers.dev",
         "localhost:3000",
       ],

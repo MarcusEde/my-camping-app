@@ -1,3 +1,4 @@
+// src/components/GuestAppUI.tsx
 "use client";
 
 import type {
@@ -18,6 +19,7 @@ import {
 } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
+import { prefetchAiPlan } from "@/app/camp/[slug]/ai-action"; // ← NEW
 import type { RoadDistanceMap } from "@/lib/routing";
 import AktiviteterTab from "./tabs/AktiviteterTab";
 import InfoTab from "./tabs/InfoTab";
@@ -44,7 +46,6 @@ export function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-const SPRING_TAP = { type: "spring" as const, stiffness: 440, damping: 24 };
 const SPRING_SNAP = { type: "spring" as const, stiffness: 500, damping: 30 };
 const SPRING_LAYOUT = { type: "spring" as const, stiffness: 380, damping: 28 };
 
@@ -205,6 +206,26 @@ export default function GuestAppUI({
     scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
+  // ── NEW: Prefetch AI plan for all languages on mount ──
+  // Waits for weather so we don't generate with defaults
+  // then regenerate when real weather arrives. Fire-and-
+  // forget — silent failure is fine, the planner tab falls
+  // back to on-demand generation via getAiPlan.
+  const prefetchedKey = useRef<string>("");
+
+  useEffect(() => {
+    if (!visiblePlaces.length || !weather) return;
+
+    const key = `${campground.id}-${weather.temp}-${weather.isRaining}-${weather.windSpeed}`;
+    if (prefetchedKey.current === key) return;
+    prefetchedKey.current = key;
+
+    prefetchAiPlan(campground, weather, visiblePlaces, distanceMap).catch(
+      () => {},
+    );
+  }, [campground, weather, visiblePlaces, distanceMap]);
+  // ── END NEW ───────────────────────────────────────────
+
   return (
     <>
       <PWAMeta brand={brand} />
@@ -264,14 +285,21 @@ export default function GuestAppUI({
               className="absolute inset-0"
               style={{ backgroundColor: brand }}
             />
+
+            {/* HERO IMAGE with FOCAL POINT support */}
             <img
               src={heroImage}
               alt=""
               className="absolute inset-0 h-full w-full object-cover"
+              style={{
+                objectPosition:
+                  (campground as any).hero_image_position || "center",
+              }}
               onError={(e) => {
                 e.currentTarget.style.display = "none";
               }}
             />
+
             <div
               className="absolute inset-0 mix-blend-multiply opacity-35"
               style={{ backgroundColor: brand }}
@@ -481,6 +509,7 @@ function PWAMeta({ brand }: { brand: string }) {
       document.head.appendChild(metaTheme);
     }
     metaTheme.setAttribute("content", brand);
+
     let metaCapable = document.querySelector(
       'meta[name="apple-mobile-web-app-capable"]',
     );
@@ -490,6 +519,7 @@ function PWAMeta({ brand }: { brand: string }) {
       metaCapable.setAttribute("content", "yes");
       document.head.appendChild(metaCapable);
     }
+
     let metaStatus = document.querySelector(
       'meta[name="apple-mobile-web-app-status-bar-style"]',
     );
@@ -499,6 +529,7 @@ function PWAMeta({ brand }: { brand: string }) {
       metaStatus.setAttribute("content", "black-translucent");
       document.head.appendChild(metaStatus);
     }
+
     document.body.style.overscrollBehavior = "none";
     document.documentElement.style.overscrollBehavior = "none";
     return () => {

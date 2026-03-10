@@ -38,6 +38,14 @@ export type NoteTranslations = {
   [lang in "en" | "de" | "da"]?: string;
 };
 
+/** Per-language translation for a partner (name + description). */
+export type PartnerTranslations = {
+  [lang in "en" | "de" | "da"]?: {
+    business_name: string;
+    description: string;
+  };
+};
+
 /** Translatable campground settings fields. */
 export type TranslatableSettingsFields =
   | "check_out_info"
@@ -70,6 +78,7 @@ export type Campground = {
   primary_color: string;
   logo_url?: string | null;
   hero_image_url?: string | null;
+  hero_image_position?: string | null;
 
   // Guest info
   wifi_name?: string | null;
@@ -151,6 +160,8 @@ export type PromotedPartner = {
   starts_at: string;
   ends_at?: string | null;
   created_at: string;
+  /** Auto-translated name & description keyed by language code. */
+  translations: PartnerTranslations | null;
 };
 
 // ─── InternalLocation ─────────────────────────────────────

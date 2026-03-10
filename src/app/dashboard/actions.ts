@@ -3,6 +3,7 @@
 import {
   translateAnnouncement,
   translateNote,
+  translatePartner,
   translateSettings,
 } from "@/lib/gemini";
 import { createClient } from "@/lib/supabase/server";
@@ -32,6 +33,7 @@ const CampgroundSettingsSchema = z.object({
   emergency_info: z.string().max(1000, "Max 1000 tecken").optional(),
   camp_rules: z.string().max(1000, "Max 1000 tecken").optional(),
   address: z.string().max(255).optional(),
+  hero_image_position: z.string().max(50).nullable().optional(),
 });
 
 const AnnouncementSchema = z.object({
@@ -56,8 +58,14 @@ const PartnerSchema = z.object({
   logo_url: z.string().url().nullable().optional(),
   cached_place_id: z.string().uuid().nullable().optional(),
   priority_rank: z.number().int().default(0),
-  starts_at: z.string().datetime().optional(),
-  ends_at: z.string().datetime().nullable().optional(),
+  starts_at: z.preprocess(
+    (val) => (val === "" ? undefined : val),
+    z.string().datetime().optional(),
+  ),
+  ends_at: z.preprocess(
+    (val) => (val === "" ? null : val),
+    z.string().datetime().nullable().optional(),
+  ),
 });
 
 /**
@@ -74,7 +82,7 @@ async function verifyOwnership(campgroundId: string) {
   const { data: camp, error } = await supabase
     .from("campgrounds")
     .select(
-      "id, slug, owner_id, check_out_info, trash_rules, emergency_info, camp_rules, reception_hours, subscription_status", // <-- Added subscription_status
+      "id, slug, owner_id, check_out_info, trash_rules, emergency_info, camp_rules, reception_hours, subscription_status",
     )
     .eq("id", campgroundId)
     .single();
@@ -82,7 +90,6 @@ async function verifyOwnership(campgroundId: string) {
   if (error || !camp) throw new Error("Campingen hittades inte.");
   if (camp.owner_id !== user.id) throw new Error("Behörighet saknas.");
 
-  // 🚫 BLOCK CHANGES IF INACTIVE
   if (
     camp.subscription_status === "inactive" ||
     camp.subscription_status === "cancelled"
@@ -126,7 +133,6 @@ export async function updateCampgroundSettings(
   const data = validated.data;
   const { supabase, camp } = await verifyOwnership(campgroundId);
 
-  // Collect the text fields that need translation
   const translatableFields = {
     check_out_info: data.check_out_info || null,
     trash_rules: data.trash_rules || null,
@@ -135,7 +141,6 @@ export async function updateCampgroundSettings(
     reception_hours: data.reception_hours || null,
   };
 
-  // Check if any translatable field actually changed
   const textChanged =
     (data.check_out_info ?? null) !== (camp.check_out_info ?? null) ||
     (data.trash_rules ?? null) !== (camp.trash_rules ?? null) ||
@@ -143,12 +148,10 @@ export async function updateCampgroundSettings(
     (data.camp_rules ?? null) !== (camp.camp_rules ?? null) ||
     (data.reception_hours ?? null) !== (camp.reception_hours ?? null);
 
-  // Check if any translatable field has content
   const hasTranslatableContent = Object.values(translatableFields).some(
     (v) => typeof v === "string" && v.trim().length > 0,
   );
 
-  // Only call Gemini if text actually changed AND there's content to translate
   let settingsTranslationsUpdate: Record<string, unknown> | undefined;
 
   if (textChanged) {
@@ -156,7 +159,6 @@ export async function updateCampgroundSettings(
       const settingsTranslations = await translateSettings(translatableFields);
       settingsTranslationsUpdate = settingsTranslations;
     } else {
-      // All text fields were cleared — reset translations
       settingsTranslationsUpdate = {};
     }
   }
@@ -164,6 +166,7 @@ export async function updateCampgroundSettings(
   const updatePayload: Record<string, unknown> = {
     primary_color: data.primary_color,
     hero_image_url: data.hero_image_url,
+    hero_image_position: data.hero_image_position,
     logo_url: data.logo_url,
     wifi_name: data.wifi_name || null,
     wifi_password: data.wifi_password || null,
@@ -178,7 +181,6 @@ export async function updateCampgroundSettings(
     camp_rules: data.camp_rules || null,
   };
 
-  // Only include settings_translations if text changed
   if (settingsTranslationsUpdate !== undefined) {
     updatePayload.settings_translations = settingsTranslationsUpdate;
   }
@@ -481,6 +483,12 @@ export async function createPromotedPartner(
   const { supabase, camp } = await verifyOwnership(campgroundId);
   const data = validated.data;
 
+  // FIX: Generera översättningar för den nya partnern
+  const translations = await translatePartner(
+    data.business_name.trim(),
+    data.description?.trim() || "",
+  );
+
   const { error } = await supabase.from("promoted_partners").insert([
     {
       campground_id: campgroundId,
@@ -494,6 +502,7 @@ export async function createPromotedPartner(
       is_active: true,
       starts_at: data.starts_at || new Date().toISOString(),
       ends_at: data.ends_at || null,
+      translations, // Spara översättningar
     },
   ]);
 
@@ -511,21 +520,42 @@ export async function updatePromotedPartner(
 
   const data = validated.data;
   const supabase = await createClient();
+
+  // FIX: Hämta gammal data för att se om texten ändrats
   const { data: partner } = await supabase
     .from("promoted_partners")
-    .select("campground_id")
+    .select("campground_id, business_name, description")
     .eq("id", partnerId)
     .single();
-  if (!partner) throw new Error("Partner saknas.");
 
+  if (!partner) throw new Error("Partner saknas.");
   const { camp } = await verifyOwnership(partner.campground_id);
+
+  // Kontrollera om namn eller beskrivning har ändrats
+  const nameChanged =
+    data.business_name !== undefined &&
+    data.business_name.trim() !== partner.business_name;
+  const descChanged =
+    data.description !== undefined &&
+    (data.description?.trim() || null) !== (partner.description || null);
+
+  const updatePayload: Record<string, any> = {
+    ...data,
+    business_name: data.business_name?.trim(),
+  };
+
+  // FIX: Översätt på nytt om innehållet ändrats
+  if (nameChanged || descChanged) {
+    const newTranslations = await translatePartner(
+      data.business_name?.trim() || partner.business_name,
+      data.description?.trim() || partner.description || "",
+    );
+    updatePayload.translations = newTranslations;
+  }
 
   const { error } = await supabase
     .from("promoted_partners")
-    .update({
-      ...data,
-      business_name: data.business_name?.trim(),
-    })
+    .update(updatePayload)
     .eq("id", partnerId);
 
   if (error) throw new Error(error.message);

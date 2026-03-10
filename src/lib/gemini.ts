@@ -1,6 +1,7 @@
 import type {
   AnnouncementTranslations,
   NoteTranslations,
+  PartnerTranslations,
   SettingsTranslations,
 } from "@/types/database";
 import { GoogleGenerativeAI } from "@google/generative-ai";
@@ -88,6 +89,45 @@ Return ONLY valid JSON matching this exact shape (no markdown, no wrapping):
   }
 }
 
+// ─── translatePartner ───────────────────────────────────
+
+export async function translatePartner(
+  name: string,
+  description: string,
+): Promise<PartnerTranslations> {
+  try {
+    const model = getModel();
+
+    const prompt = `
+You are a professional translator for a Scandinavian camping app.
+Translate the following Swedish business/partner info into English (en), German (de) and Danish (da).
+Keep the tone professional and inviting.
+
+Business Name: "${name}"
+Description: "${description}"
+
+Return ONLY valid JSON matching this exact shape (no markdown, no wrapping):
+{
+  "en": { "business_name": "…", "description": "…" },
+  "de": { "business_name": "…", "description": "…" },
+  "da": { "business_name": "…", "description": "…" }
+}`;
+
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        responseMimeType: "application/json",
+        temperature: 0.3,
+      },
+    });
+
+    return JSON.parse(result.response.text()) as PartnerTranslations;
+  } catch (err) {
+    console.error("[translatePartner] failed:", err);
+    return {};
+  }
+}
+
 // ─── translateSettings ───────────────────────────────────
 /**
  * Translates campground info fields (check-out, trash, emergency,
@@ -154,7 +194,7 @@ Only include the field keys that were provided above:
   }
 }
 
-// ─── generateItinerary (existing, unchanged) ─────────────
+// ─── generateItinerary ───────────────────────────────────
 
 export async function generateItinerary(
   campgroundName: string,
