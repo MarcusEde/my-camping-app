@@ -23,4 +23,8 @@
       "id": "c5c3b41363b34a3db0dee2b8166d8d77",
     },
   ],
+  "vars": {
+    "NEXT_PUBLIC_SUPABASE_URL": "YOUR_ACTUAL_URL_HERE",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "YOUR_ACTUAL_ANON_KEY_HERE",
+  },
 }
