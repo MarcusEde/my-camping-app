@@ -74,8 +74,8 @@ interface GeminiResponse {
 /** L1: in-memory, lives only for the current invocation */
 const l1 = new Map<string, CachedPlan>();
 
-const CACHE_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
-const CACHE_TTL_S = 4 * 60 * 60; // same in seconds for KV
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 4 hours
+const CACHE_TTL_S = 24 * 60 * 60; // same in seconds for KV
 function getKV(): KVNamespace | null {
   return null;
 }
