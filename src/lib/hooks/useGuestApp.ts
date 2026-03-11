@@ -17,6 +17,18 @@ interface UseGuestAppParams {
   distanceMap: RoadDistanceMap;
 }
 
+/**
+ * Weather bucket matching server logic.
+ * When this changes, we need to re-prefetch.
+ */
+function weatherBucket(weather: WeatherProp | null): string {
+  if (!weather) return "none";
+  const tBucket = Math.round(weather.temp / 5) * 5;
+  const rain = weather.isRaining ? "r" : "d";
+  const wind = weather.windSpeed >= 10 ? "W" : "w";
+  return `${rain}_${tBucket}_${wind}`;
+}
+
 export function useGuestApp({
   campground,
   places,
@@ -58,14 +70,19 @@ export function useGuestApp({
     return () => observer.disconnect();
   }, []);
 
-  // Prefetch AI plan
+  // Prefetch AI plan — runs on mount AND when weather bucket changes
   useEffect(() => {
-    if (!visiblePlaces.length || !weather) return;
-    const key = `${campground.id}-${weather.temp}-${weather.isRaining}-${weather.windSpeed}`;
+    if (!visiblePlaces.length) return;
+
+    const wb = weatherBucket(weather);
+    const key = `${campground.id}-${wb}`;
+
     if (prefetchedKey.current === key) return;
     prefetchedKey.current = key;
+
+    console.log(`[GuestApp] Prefetching AI plan (weather: ${wb})`);
     prefetchAiPlan(campground, weather, visiblePlaces, distanceMap).catch(
-      () => {},
+      (err) => console.warn("[GuestApp] Prefetch failed:", err),
     );
   }, [campground, weather, visiblePlaces, distanceMap]);
 

@@ -26,6 +26,18 @@ interface UsePlannerParams {
   distanceMap: RoadDistanceMap;
 }
 
+/**
+ * Simple weather bucket for cache-key purposes (matches server logic).
+ * 5°C temp buckets, binary rain, binary wind.
+ */
+function clientWeatherKey(weather: WeatherProp | null | undefined): string {
+  if (!weather) return "unknown";
+  const tBucket = Math.round(weather.temp / 5) * 5;
+  const rain = weather.isRaining ? "r" : "d";
+  const wind = weather.windSpeed >= 10 ? "W" : "w";
+  return `${rain}_${tBucket}_${wind}`;
+}
+
 export function usePlanner({
   campground,
   places,
@@ -38,7 +50,10 @@ export function usePlanner({
   const [nowMin, setNowMin] = useState(browserNowMinutes);
 
   const dateKey = todayKey();
-  const fetchKey = `${campground.id}-${lang}-${dateKey}`;
+  const wKey = clientWeatherKey(weather);
+
+  // Include weather key in fetch key so we re-fetch when weather bucket changes
+  const fetchKey = `${campground.id}-${lang}-${dateKey}-${wKey}`;
   const lastFetchKey = useRef<string | null>(null);
   const argsRef = useRef({ campground, weather, places, distanceMap });
   argsRef.current = { campground, weather, places, distanceMap };
@@ -65,13 +80,13 @@ export function usePlanner({
       .finally(() => setLoading(false));
   }, [fetchKey, lang, dateKey]);
 
-  // Tick every minute
+  // Tick every minute for dimming
   useEffect(() => {
     const id = setInterval(() => setNowMin(browserNowMinutes()), 60_000);
     return () => clearInterval(id);
   }, []);
 
-  // Build map URL for a place (skip on-site)
+  // Build map URL for a place
   const getMapUrl = (placeId?: string): string | null => {
     if (!placeId) return null;
     const p = places.find((x) => x.id === placeId);

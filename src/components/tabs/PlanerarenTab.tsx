@@ -424,6 +424,8 @@ function TimelineEntry({
                   place={place}
                   dist={distanceMap[place.id] ?? ""}
                   labels={l}
+                  lang={lang}
+                  scheduledTime={item.time}
                 />
               </div>
             )}
@@ -614,21 +616,160 @@ function DirectionsButton({
   );
 }
 
+/* ── Opening hours helpers ───────────────────────────── */
+
+/**
+ * Parse "HH:MM–HH:MM" style time ranges from opening hours text.
+ * Handles common Swedish/European formats.
+ */
+function parseHoursRange(text: string): { open: number; close: number } | null {
+  if (!text) return null;
+
+  if (/24\s*(hours|h|timmar|stunden|timer)|dygnet\s*runt|døgnåbent/i.test(text))
+    return { open: 0, close: 24 };
+
+  if (/closed|stängt|geschlossen|lukket/i.test(text)) return null;
+
+  const m = text.match(/(\d{1,2})[.:](\d{2})\s*[-–—]\s*(\d{1,2})[.:](\d{2})/);
+  if (m) {
+    return {
+      open: parseInt(m[1]) + parseInt(m[2]) / 60,
+      close: parseInt(m[3]) + parseInt(m[4]) / 60,
+    };
+  }
+
+  return null;
+}
+
+/** Get current hour as decimal (e.g. 14.5 = 14:30) */
+function currentHourDecimal(): number {
+  const now = new Date();
+  return now.getHours() + now.getMinutes() / 60;
+}
+
+/** Format a decimal hour as "HH:MM" */
+function formatHourAsTime(h: number): string {
+  const hrs = Math.floor(h);
+  const mins = Math.round((h - hrs) * 60);
+  return `${hrs.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}`;
+}
+
 /* ── Badges ──────────────────────────────────────────── */
+
+type BadgeStatus =
+  | { type: "open" }
+  | { type: "opens_at"; time: string }
+  | { type: "closed" }
+  | { type: "unknown" };
+
+/**
+ * Three-state badge logic:
+ *   🟢 "Öppet"        — open right now
+ *   🟡 "Öppnar HH:MM" — closed now, opens before/at scheduled time
+ *   🔴 "Stängt"        — closed now AND at scheduled time
+ */
+function getPlaceStatus(
+  place: CachedPlace,
+  scheduledTime?: string,
+): BadgeStatus {
+  // Get opening hours data
+  const hoursData = place.custom_hours
+    ? { isOpenNow: false, text: place.custom_hours }
+    : getTodaysOpeningHours(place.raw_data);
+
+  // No hours info at all — don't show badge
+  if (!hoursData) return { type: "unknown" };
+
+  const hoursText = hoursData.text ?? place.custom_hours ?? "";
+  const range = parseHoursRange(hoursText);
+
+  // Explicitly closed today
+  if (/closed|stängt|geschlossen|lukket/i.test(hoursText)) {
+    return { type: "closed" };
+  }
+
+  // No parseable range — trust the isOpenNow flag if available
+  if (!range) {
+    if (hoursData.isOpenNow) return { type: "open" };
+    return { type: "unknown" };
+  }
+
+  const now = currentHourDecimal();
+
+  // Currently open
+  if (now >= range.open && now < range.close) {
+    return { type: "open" };
+  }
+
+  // Currently closed — check if it'll be open at scheduled time
+  if (scheduledTime) {
+    const timeParts = scheduledTime.match(/^(\d{1,2}):(\d{2})$/);
+    if (timeParts) {
+      const scheduledHour =
+        parseInt(timeParts[1]) + parseInt(timeParts[2]) / 60;
+
+      // Place opens before or at the scheduled time, and is still open then
+      if (scheduledHour >= range.open && scheduledHour < range.close) {
+        return { type: "opens_at", time: formatHourAsTime(range.open) };
+      }
+    }
+  }
+
+  // Closed now and at scheduled time
+  return { type: "closed" };
+}
+
+const badgeLabels: Record<
+  string,
+  { openNow: string; opensAt: (t: string) => string; closed: string }
+> = {
+  sv: {
+    openNow: "Öppet",
+    opensAt: (t) => `Öppnar ${t}`,
+    closed: "Stängt",
+  },
+  en: {
+    openNow: "Open",
+    opensAt: (t) => `Opens ${t}`,
+    closed: "Closed",
+  },
+  de: {
+    openNow: "Geöffnet",
+    opensAt: (t) => `Öffnet ${t}`,
+    closed: "Geschlossen",
+  },
+  da: {
+    openNow: "Åben",
+    opensAt: (t) => `Åbner ${t}`,
+    closed: "Lukket",
+  },
+  nl: {
+    openNow: "Open",
+    opensAt: (t) => `Opent ${t}`,
+    closed: "Gesloten",
+  },
+  no: {
+    openNow: "Åpent",
+    opensAt: (t) => `Åpner ${t}`,
+    closed: "Stengt",
+  },
+};
 
 function Badges({
   place,
   dist,
   labels: l,
+  lang,
+  scheduledTime,
 }: {
   place: CachedPlace;
   dist: string;
   labels: PlannerLabels;
+  lang: Lang;
+  scheduledTime?: string;
 }) {
-  const h = place.custom_hours
-    ? { isOpenNow: true }
-    : getTodaysOpeningHours(place.raw_data);
-  const closed = h ? !h.isOpenNow : false;
+  const status = getPlaceStatus(place, scheduledTime);
+  const bl = badgeLabels[lang] ?? badgeLabels.en;
 
   return (
     <div className="flex shrink-0 items-center gap-1.5">
@@ -647,18 +788,30 @@ function Badges({
           {dist}
         </span>
       )}
-      {h && (
+      {status.type !== "unknown" && (
         <span
           className={`flex items-center gap-1 rounded-full px-1.5 py-[3px] text-[7px] font-black uppercase tracking-wider ring-1 ${
-            closed
-              ? "bg-red-50 text-red-400 ring-red-100"
-              : "bg-emerald-50 text-emerald-600 ring-emerald-100"
+            status.type === "open"
+              ? "bg-emerald-50 text-emerald-600 ring-emerald-100"
+              : status.type === "opens_at"
+                ? "bg-amber-50 text-amber-600 ring-amber-100"
+                : "bg-red-50 text-red-400 ring-red-100"
           }`}
         >
           <span
-            className={`h-1.5 w-1.5 rounded-full ${closed ? "bg-red-300" : "bg-emerald-400"}`}
+            className={`h-1.5 w-1.5 rounded-full ${
+              status.type === "open"
+                ? "bg-emerald-400"
+                : status.type === "opens_at"
+                  ? "bg-amber-400"
+                  : "bg-red-300"
+            }`}
           />
-          {closed ? l.closed : l.openNow}
+          {status.type === "open"
+            ? bl.openNow
+            : status.type === "opens_at"
+              ? bl.opensAt(status.time)
+              : bl.closed}
         </span>
       )}
     </div>
