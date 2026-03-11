@@ -387,20 +387,22 @@ export default function PulsTab({
   // ─── Tip of the Day ──────────────────────────────────
   const [advisedPlace, setAdvisedPlace] = useState<CachedPlace | null>(() => {
     if (pinnedPlaces.length === 0) return null;
-    let pool = pinnedPlaces;
+
     const isCold = weather ? weather.temp < 15 : false;
+    let pool: CachedPlace[] = []; // Start with an empty pool
 
     if (weather?.isRaining || isCold) {
-      const indoor = pinnedPlaces.filter(
+      // Filter for places that are explicitly marked indoor OR are in indoor categories
+      pool = pinnedPlaces.filter(
         (p) =>
           p.is_indoor ||
           ["cafe", "museum", "shopping", "spa", "cinema", "bowling"].includes(
             p.category,
           ),
       );
-      if (indoor.length > 0) pool = indoor;
     } else {
-      const outdoor = pinnedPlaces.filter((p) =>
+      // Filter for outdoor-friendly categories
+      pool = pinnedPlaces.filter((p) =>
         [
           "beach",
           "park",
@@ -411,28 +413,33 @@ export default function PulsTab({
           "other",
         ].includes(p.category),
       );
-      if (outdoor.length > 0) pool = outdoor;
     }
+
+    // If no suitable matches, return null so the section remains empty/hidden
+    if (pool.length === 0) return null;
+
     return pool[0];
   });
 
   useEffect(() => {
-    if (pinnedPlaces.length === 0) return;
+    if (pinnedPlaces.length === 0) {
+      setAdvisedPlace(null);
+      return;
+    }
 
-    let pool = pinnedPlaces;
     const isCold = weather ? weather.temp < 15 : false;
+    let pool: CachedPlace[] = []; // Start with an empty pool
 
     if (weather?.isRaining || isCold) {
-      const indoor = pinnedPlaces.filter(
+      pool = pinnedPlaces.filter(
         (p) =>
           p.is_indoor ||
           ["cafe", "museum", "shopping", "spa", "cinema", "bowling"].includes(
             p.category,
           ),
       );
-      if (indoor.length > 0) pool = indoor;
     } else {
-      const outdoor = pinnedPlaces.filter((p) =>
+      pool = pinnedPlaces.filter((p) =>
         [
           "beach",
           "park",
@@ -443,11 +450,14 @@ export default function PulsTab({
           "other",
         ].includes(p.category),
       );
-      if (outdoor.length > 0) pool = outdoor;
     }
 
-    const dayOfMonth = new Date().getDate();
-    setAdvisedPlace(pool[dayOfMonth % pool.length]);
+    if (pool.length === 0) {
+      setAdvisedPlace(null); // Clear the tip if nothing fits the weather
+    } else {
+      const dayOfMonth = new Date().getDate();
+      setAdvisedPlace(pool[dayOfMonth % pool.length]);
+    }
   }, [pinnedPlaces, weather]);
 
   const isAdvisedOnSite = advisedPlace?.is_on_site ?? false;

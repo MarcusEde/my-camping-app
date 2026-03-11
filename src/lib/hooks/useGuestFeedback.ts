@@ -29,7 +29,7 @@ export function useGuestFeedback({
 
   // Show prompt after delay, unless already submitted
   useEffect(() => {
-    if (sessionStorage.getItem(storageKey)) {
+    if (localStorage.getItem(storageKey)) {
       setPhase("dismissed");
       return;
     }
@@ -52,7 +52,7 @@ export function useGuestFeedback({
         rating,
         withComment ? comment : undefined,
       );
-      sessionStorage.setItem(storageKey, "1");
+      localStorage.setItem(storageKey, "1");
       setSending(false);
       setPhase("done");
       setTimeout(() => setPhase("dismissed"), FEEDBACK_THANKS_DURATION_MS);
