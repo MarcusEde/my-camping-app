@@ -1,4 +1,6 @@
-import { createClient } from "@/lib/supabase/server";
+// src/app/camp/[slug]/layout.tsx
+
+import { loadCampMeta } from "@/lib/data/camp-loader";
 import type { Metadata, Viewport } from "next";
 
 interface Props {
@@ -12,12 +14,7 @@ export async function generateViewport({
   params: Promise<{ slug: string }>;
 }): Promise<Viewport> {
   const { slug } = await params;
-  const supabase = await createClient();
-  const { data: camp } = await supabase
-    .from("campgrounds")
-    .select("primary_color")
-    .eq("slug", slug)
-    .single();
+  const camp = await loadCampMeta(slug);
 
   return {
     width: "device-width",
@@ -35,13 +32,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const supabase = await createClient();
-  const { data: camp } = await supabase
-    .from("campgrounds")
-    .select("name, primary_color, logo_url")
-    .eq("slug", slug)
-    .single();
-
+  const camp = await loadCampMeta(slug);
   const name = camp?.name ?? "Camp Concierge";
 
   return {

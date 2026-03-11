@@ -1,65 +1,68 @@
+// src/lib/place-utils.ts
+
+import type { UtforskaLabels } from "@/lib/translations";
 import { calculateDistanceKm, formatDistance } from "./distance";
 
-/**
- * Reads opening hours from Google Places API (New) raw data.
- *
- * Google stores hours at:
- *   rawData.currentOpeningHours.weekdayDescriptions  (seasonal)
- *   rawData.regularOpeningHours.weekdayDescriptions   (year-round)
- *
- * Each entry looks like:
- *   "Måndag: 09:00–18:00"    (Swedish)
- *   "Monday: 9:00 AM – 5:00 PM"  (English fallback)
- *   "Tisdag: Stängt"
- *   "Wednesday: Closed"
- *   "Torsdag: Öppet dygnet runt"
- *   "Friday: Open 24 hours"
- *
- * IMPORTANT: Google's `openNow` field is cached from fetch time
- * and may be hours or days stale. We ALWAYS calculate live from
- * parsed hours. `openNow` is only used as a last resort when
- * the hours text is unparseable.
- */
+// ─── Types ────────────────────────────────────────────────
+
+export interface HoursDisplay {
+  text: string;
+  dotColor: string;
+  statusText: string;
+}
+
+export interface MapLinkResult {
+  canNavigate: boolean;
+  mapLink: string;
+}
+
+// ─── Opening Hours (Google Places API) ────────────────────
+//
+// Google stores hours at:
+//   rawData.currentOpeningHours.weekdayDescriptions  (seasonal)
+//   rawData.regularOpeningHours.weekdayDescriptions   (year-round)
+//
+// Each entry looks like:
+//   "Måndag: 09:00–18:00"    (Swedish)
+//   "Monday: 9:00 AM – 5:00 PM"  (English fallback)
+//   "Tisdag: Stängt"
+//   "Wednesday: Closed"
+//   "Torsdag: Öppet dygnet runt"
+//   "Friday: Open 24 hours"
+//
+// IMPORTANT: Google's `openNow` field is cached from fetch time
+// and may be hours or days stale. We ALWAYS calculate live from
+// parsed hours. `openNow` is only used as a last resort when
+// the hours text is unparseable.
+
 export function getTodaysOpeningHours(
   rawData: any,
 ): { text: string; isOpenNow: boolean } | null {
   if (!rawData) return null;
 
-  // ── 1. Find the weekday descriptions array ──────────────
-  // Prefer currentOpeningHours (seasonal), fall back to regularOpeningHours
   const hoursSource =
     rawData.currentOpeningHours ?? rawData.regularOpeningHours;
 
-  // Also support legacy flat format: rawData.openingHours
   const descriptions: string[] | null =
     hoursSource?.weekdayDescriptions ??
     (Array.isArray(rawData.openingHours) ? rawData.openingHours : null);
 
   if (!descriptions || descriptions.length === 0) return null;
 
-  // ── 2. Stale "open now" from Google — LAST RESORT ONLY ──
-  // This value reflects the state at fetch time, not right now.
-  // Only used in step 7 when we can't parse the hours text.
   const googleOpenNow: boolean | null = hoursSource?.openNow ?? null;
 
-  // ── 3. Find today's entry ───────────────────────────────
-  // Google uses Monday=0 index in weekdayDescriptions
-  const jsDay = new Date().getDay(); // 0=Sun, 1=Mon...
-  const googleIndex = jsDay === 0 ? 6 : jsDay - 1; // Mon=0, Tue=1, ..., Sun=6
+  const jsDay = new Date().getDay();
+  const googleIndex = jsDay === 0 ? 6 : jsDay - 1;
 
   const todayString = descriptions[googleIndex];
   if (!todayString) return null;
 
-  // ── 4. Extract the time portion ─────────────────────────
-  // "Måndag: 09:00–18:00" → "09:00–18:00"
-  // "Monday: 9:00 AM – 5:00 PM" → "9:00 AM – 5:00 PM"
   const colonIndex = todayString.indexOf(":");
   if (colonIndex === -1) return null;
 
   const hoursOnly = todayString.substring(colonIndex + 1).trim();
   const hoursLower = hoursOnly.toLowerCase();
 
-  // ── 5. Handle special cases ─────────────────────────────
   if (
     hoursLower === "closed" ||
     hoursLower === "stängt" ||
@@ -78,10 +81,6 @@ export function getTodaysOpeningHours(
     return { text: "Dygnet runt", isOpenNow: true };
   }
 
-  // ── 6. Parse time range ─────────────────────────────────
-  // Handle both 24h format "09:00–18:00" and 12h "9:00 AM – 5:00 PM"
-
-  // Try 24h format first: "09:00–18:00" or "09:00 - 18:00"
   const match24 = hoursOnly.match(
     /(\d{1,2}):(\d{2})\s*[–\-—to]+\s*(\d{1,2}):(\d{2})/i,
   );
@@ -91,17 +90,11 @@ export function getTodaysOpeningHours(
     const openM = parseInt(match24[2], 10);
     const closeH = parseInt(match24[3], 10);
     const closeM = parseInt(match24[4], 10);
-
-    // ALWAYS calculate live — googleOpenNow is stale
     const isOpenNow = calculateIsOpen(openH, openM, closeH, closeM);
-
-    // Format display as "09:00 – 18:00"
     const displayText = `${pad(openH)}:${pad(openM)} – ${pad(closeH)}:${pad(closeM)}`;
-
     return { text: displayText, isOpenNow };
   }
 
-  // Try 12h format: "9:00 AM – 5:00 PM"
   const match12 = hoursOnly.match(
     /(\d{1,2}):(\d{2})\s*(AM|PM)\s*[–\-—to]+\s*(\d{1,2}):(\d{2})\s*(AM|PM)/i,
   );
@@ -111,23 +104,95 @@ export function getTodaysOpeningHours(
     const openM = parseInt(match12[2], 10);
     const closeH = to24h(parseInt(match12[4], 10), match12[6]);
     const closeM = parseInt(match12[5], 10);
-
-    // ALWAYS calculate live — googleOpenNow is stale
     const isOpenNow = calculateIsOpen(openH, openM, closeH, closeM);
-
     const displayText = `${pad(openH)}:${pad(openM)} – ${pad(closeH)}:${pad(closeM)}`;
-
     return { text: displayText, isOpenNow };
   }
 
-  // ── 7. Fallback: unparseable hours text ─────────────────
-  // We couldn't extract open/close times, so we can't calculate.
-  // Use Google's stale openNow as a last resort. Default to false
-  // (safer to show "Closed" than incorrectly show "Open").
   return { text: hoursOnly, isOpenNow: googleOpenNow ?? false };
 }
 
-// ─── Helpers ──────────────────────────────────────────────
+// ─── Opening Hours Display (UI-ready) ─────────────────────
+
+export function getOpeningHoursDisplay(
+  rawData: Record<string, unknown> | null | undefined,
+  labels: UtforskaLabels,
+): HoursDisplay | null {
+  const hoursData = getTodaysOpeningHours(rawData);
+  if (!hoursData) return null;
+
+  const hoursLower = hoursData.text.toLowerCase();
+  const isClosed =
+    hoursLower.includes("stängt") || hoursLower.includes("closed");
+  const is24h = hoursLower.includes("dygnet") || hoursLower.includes("24");
+
+  if (isClosed) {
+    return {
+      text: labels.closedToday,
+      dotColor: "bg-red-400",
+      statusText: labels.closedToday,
+    };
+  }
+  if (is24h) {
+    return {
+      text: labels.open24,
+      dotColor: "bg-emerald-500",
+      statusText: labels.open24,
+    };
+  }
+  if (hoursData.isOpenNow) {
+    return {
+      text: hoursData.text,
+      dotColor: "bg-emerald-500",
+      statusText: labels.openNow,
+    };
+  }
+  return {
+    text: hoursData.text,
+    dotColor: "bg-stone-300",
+    statusText: labels.closedNow,
+  };
+}
+
+// ─── Distance ─────────────────────────────────────────────
+
+export function getFormattedDistance(
+  campLat: number,
+  campLng: number,
+  placeLat: number | null,
+  placeLng: number | null,
+): string | null {
+  if (!placeLat || !placeLng) return null;
+  const distKm = calculateDistanceKm(campLat, campLng, placeLat, placeLng);
+  return formatDistance(distKm);
+}
+
+// ─── Map Link ─────────────────────────────────────────────
+
+export function getMapLink(
+  latitude: number | null | undefined,
+  longitude: number | null | undefined,
+  address: string | null | undefined,
+): MapLinkResult {
+  const hasCoordinates = Boolean(latitude && longitude);
+  const hasAddress = Boolean(address);
+
+  if (hasCoordinates) {
+    return {
+      canNavigate: true,
+      mapLink: `https://maps.google.com/?q=${latitude},${longitude}`,
+    };
+  }
+  if (hasAddress) {
+    return {
+      canNavigate: true,
+      mapLink: `https://maps.google.com/?q=${encodeURIComponent(address!)}`,
+    };
+  }
+  return { canNavigate: false, mapLink: "" };
+}
+
+// ─── Private Helpers ──────────────────────────────────────
 
 function pad(n: number): string {
   return String(n).padStart(2, "0");
@@ -146,7 +211,6 @@ function calculateIsOpen(
   closeM: number,
 ): boolean {
   const now = new Date();
-  // Use Swedish timezone
   const svTime = new Date(
     now.toLocaleString("en-US", { timeZone: "Europe/Stockholm" }),
   );
@@ -154,7 +218,6 @@ function calculateIsOpen(
   const openMinutes = openH * 60 + openM;
   let closeMinutes = closeH * 60 + closeM;
 
-  // Handle past-midnight closing (e.g. 09:00–02:00)
   if (closeMinutes <= openMinutes) {
     closeMinutes += 24 * 60;
   }
@@ -166,14 +229,33 @@ function calculateIsOpen(
 
   return adjustedCurrent >= openMinutes && adjustedCurrent < closeMinutes;
 }
+// src/lib/place-utils.ts — append before private helpers
 
-export function getFormattedDistance(
-  campLat: number,
-  campLng: number,
-  placeLat: number | null,
-  placeLng: number | null,
+// ─── Search Map Link (for planner) ───────────────────────
+
+export function buildSearchMapLink(
+  lat?: number | null,
+  lng?: number | null,
+  name?: string,
 ): string | null {
-  if (!placeLat || !placeLng) return null;
-  const distKm = calculateDistanceKm(campLat, campLng, placeLat, placeLng);
-  return formatDistance(distKm);
+  if (lat && lng)
+    return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+  if (name)
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}`;
+  return null;
+}
+// src/lib/place-utils.ts — append with other map link functions
+
+// ─── Directions Map Link (for Info tab) ───────────────────
+
+export function buildDirectionsMapLink(
+  lat?: number | null,
+  lng?: number | null,
+  name?: string,
+): string | null {
+  if (lat && lng)
+    return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+  if (name)
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}`;
+  return null;
 }

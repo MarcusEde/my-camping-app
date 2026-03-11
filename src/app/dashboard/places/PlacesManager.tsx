@@ -1,6 +1,7 @@
-// src/app/dashboard/places/PlacesManager.tsx
 "use client";
 
+import { usePlacesManager } from "@/lib/hooks/usePlacesManager";
+import { hexToRgba } from "@/lib/utils";
 import type { CachedPlace, Campground, PlaceCategory } from "@/types/database";
 import {
   Check,
@@ -18,26 +19,7 @@ import {
   Umbrella,
   X,
 } from "lucide-react";
-import React, { useMemo, useState, useTransition } from "react";
-import {
-  addCustomPlace,
-  deletePlace,
-  saveNote,
-  toggleHide,
-  togglePin,
-  updatePlaceDetails,
-} from "../actions";
-
-/* ═══════════════════════════════════════════════════════
-   Utility
-   ═══════════════════════════════════════════════════════ */
-function hexToRgba(hex: string, alpha: number): string {
-  const clean = hex.replace("#", "");
-  const r = parseInt(clean.slice(0, 2), 16);
-  const g = parseInt(clean.slice(2, 4), 16);
-  const b = parseInt(clean.slice(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
+import React from "react";
 
 /* ═══════════════════════════════════════════════════════
    Constants
@@ -60,31 +42,18 @@ const CATEGORY_META: Record<PlaceCategory, { emoji: string; label: string }> = {
   other: { emoji: "📍", label: "Övrigt" },
 };
 
-/** Logical groups so the sidebar isn't just a flat list of 15 items */
-const CATEGORY_GROUPS: {
-  label: string;
-  categories: PlaceCategory[];
-}[] = [
-  {
-    label: "Mat & dryck",
-    categories: ["restaurant", "cafe"],
-  },
+const CATEGORY_GROUPS: { label: string; categories: PlaceCategory[] }[] = [
+  { label: "Mat & dryck", categories: ["restaurant", "cafe"] },
   {
     label: "Natur & friluftsliv",
     categories: ["beach", "park", "playground", "sports"],
   },
-  {
-    label: "Kultur & nöje",
-    categories: ["museum", "cinema", "attraction"],
-  },
+  { label: "Kultur & nöje", categories: ["museum", "cinema", "attraction"] },
   {
     label: "Aktiviteter",
     categories: ["bowling", "swimming", "spa", "activity"],
   },
-  {
-    label: "Övrigt",
-    categories: ["shopping", "other"],
-  },
+  { label: "Övrigt", categories: ["shopping", "other"] },
 ];
 
 const ALL_CATEGORIES = Object.keys(CATEGORY_META) as PlaceCategory[];
@@ -101,148 +70,12 @@ interface Props {
    Main Component
    ═══════════════════════════════════════════════════════ */
 export default function PlacesManager({ campground, places }: Props) {
-  const [isPending, startTransition] = useTransition();
-  const [search, setSearch] = useState("");
-  const [filterCat, setFilterCat] = useState<PlaceCategory | "all">("all");
-  const [showHidden, setShowHidden] = useState(false);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [actioningId, setActioningId] = useState<string | null>(null);
-
-  const brand = campground.primary_color || "#2A3C34";
-
-  // Add form state
-  const [newName, setNewName] = useState("");
-  const [newCategory, setNewCategory] = useState<PlaceCategory>("other");
-  const [newAddress, setNewAddress] = useState("");
-  const [newIsOnSite, setNewIsOnSite] = useState(false);
-  const [newIsIndoor, setNewIsIndoor] = useState(false);
-  const [newCustomHours, setNewCustomHours] = useState("");
-
-  // Note editing
-  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
-  const [editingNoteText, setEditingNoteText] = useState("");
-
-  // Hours/details editing
-  const [editingDetailsId, setEditingDetailsId] = useState<string | null>(null);
-  const [editIsOnSite, setEditIsOnSite] = useState(false);
-  const [editIsIndoor, setEditIsIndoor] = useState(false);
-  const [editCustomHours, setEditCustomHours] = useState("");
-
-  /** Count places per category (respects hidden filter) */
-  const categoryCounts = useMemo(() => {
-    const counts: Record<string, number> = { all: 0 };
-    for (const p of places) {
-      if (!showHidden && p.is_hidden) continue;
-      if (search && !p.name.toLowerCase().includes(search.toLowerCase()))
-        continue;
-      counts.all = (counts.all || 0) + 1;
-      counts[p.category] = (counts[p.category] || 0) + 1;
-    }
-    return counts;
-  }, [places, showHidden, search]);
-
-  const filtered = useMemo(() => {
-    return places
-      .filter((p) => {
-        if (!showHidden && p.is_hidden) return false;
-        if (filterCat !== "all" && p.category !== filterCat) return false;
-        if (search && !p.name.toLowerCase().includes(search.toLowerCase()))
-          return false;
-        return true;
-      })
-      .sort((a, b) => {
-        if (a.is_pinned && !b.is_pinned) return -1;
-        if (!a.is_pinned && b.is_pinned) return 1;
-        return a.name.localeCompare(b.name, "sv");
-      });
-  }, [places, search, filterCat, showHidden]);
-
-  /** Categories that actually have places (for mobile pill bar) */
-  const availableCats = useMemo(() => {
-    const cats = new Set(places.map((p) => p.category));
-    return ["all" as const, ...Array.from(cats)] as (PlaceCategory | "all")[];
-  }, [places]);
-
-  const withAction = (placeId: string, action: () => Promise<void>) => {
-    setActioningId(placeId);
-    startTransition(async () => {
-      try {
-        await action();
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Unknown error";
-        alert(`Fel: ${msg}`);
-      }
-      setActioningId(null);
-    });
-  };
-
-  const handleAddPlace = () => {
-    if (!newName.trim() || (!newAddress.trim() && !newIsOnSite)) return;
-    startTransition(async () => {
-      try {
-        await addCustomPlace(
-          campground.id,
-          newName.trim(),
-          newCategory,
-          newAddress.trim() || undefined,
-          newIsOnSite,
-          newIsIndoor,
-          newCustomHours.trim() || undefined,
-        );
-        setNewName("");
-        setNewAddress("");
-        setNewCategory("other");
-        setNewIsOnSite(false);
-        setNewIsIndoor(false);
-        setNewCustomHours("");
-        setShowAddForm(false);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Unknown error";
-        alert(`Fel: ${msg}`);
-      }
-    });
-  };
-
-  const handleSaveNote = (placeId: string) => {
-    withAction(placeId, async () => {
-      await saveNote(placeId, editingNoteText);
-      setEditingNoteId(null);
-      setEditingNoteText("");
-    });
-  };
-
-  const handleSaveDetails = (placeId: string) => {
-    withAction(placeId, async () => {
-      await updatePlaceDetails(placeId, {
-        is_on_site: editIsOnSite,
-        is_indoor: editIsIndoor,
-        custom_hours: editCustomHours.trim() || null,
-      });
-      setEditingDetailsId(null);
-    });
-  };
-
-  const handleDelete = (placeId: string, name: string) => {
-    if (!confirm(`Ta bort "${name}"? Kan inte ångras.`)) return;
-    withAction(placeId, () => deletePlace(placeId));
-  };
-
-  const startEditingDetails = (place: CachedPlace) => {
-    setEditingDetailsId(place.id);
-    setEditIsOnSite(place.is_on_site ?? false);
-    setEditIsIndoor(place.is_indoor ?? false);
-    setEditCustomHours(place.custom_hours ?? "");
-    setEditingNoteId(null);
-  };
-
-  const isAddFormValid =
-    newName.trim() !== "" && (newAddress.trim() !== "" || newIsOnSite);
+  const s = usePlacesManager({ campground, places });
 
   return (
     <div className="space-y-4">
       {/* ━━━ TOP BAR: Search + Actions ━━━ */}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-        {/* Search */}
         <div className="relative flex-1">
           <Search
             size={14}
@@ -251,26 +84,25 @@ export default function PlacesManager({ campground, places }: Props) {
           />
           <input
             type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={s.search}
+            onChange={(e) => s.setSearch(e.target.value)}
             placeholder="Sök platser..."
             className="w-full rounded-[10px] bg-stone-50/80 py-2.5 pl-10 pr-4 text-[12px] font-medium text-stone-700 ring-1 ring-stone-200/60 placeholder:text-stone-300 focus:outline-none focus:ring-2"
             style={
               {
-                "--tw-ring-color": hexToRgba(brand, 0.25),
+                "--tw-ring-color": hexToRgba(s.brand, 0.25),
               } as React.CSSProperties
             }
           />
         </div>
 
-        {/* Actions */}
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowHidden(!showHidden)}
+            onClick={s.toggleShowHidden}
             className="flex items-center gap-1.5 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-all active:scale-95"
             style={
-              showHidden
-                ? { backgroundColor: hexToRgba(brand, 0.08), color: brand }
+              s.showHidden
+                ? { backgroundColor: hexToRgba(s.brand, 0.08), color: s.brand }
                 : {
                     backgroundColor: "transparent",
                     color: "#a8a29e",
@@ -278,15 +110,15 @@ export default function PlacesManager({ campground, places }: Props) {
                   }
             }
           >
-            {showHidden ? <Eye size={11} /> : <EyeOff size={11} />}
+            {s.showHidden ? <Eye size={11} /> : <EyeOff size={11} />}
             Dolda
           </button>
           <button
-            onClick={() => setShowAddForm(!showAddForm)}
+            onClick={s.toggleShowAddForm}
             className="flex items-center gap-1.5 rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.1em] text-white transition-all active:scale-95"
             style={{
-              backgroundColor: brand,
-              boxShadow: `0 2px 8px ${hexToRgba(brand, 0.18)}`,
+              backgroundColor: s.brand,
+              boxShadow: `0 2px 8px ${hexToRgba(s.brand, 0.18)}`,
             }}
           >
             <Plus size={12} strokeWidth={2.5} />
@@ -295,196 +127,273 @@ export default function PlacesManager({ campground, places }: Props) {
         </div>
       </div>
 
-      {/* ━━━ MOBILE CATEGORY PILLS (hidden on lg+) ━━━ */}
-      <div className="lg:hidden">
-        <div
-          className="flex gap-1 overflow-x-auto pb-1"
-          style={{
-            WebkitOverflowScrolling: "touch",
-            scrollbarWidth: "none",
-            msOverflowStyle: "none",
-          }}
-        >
-          {availableCats.map((cat) => {
-            const meta =
-              cat === "all"
-                ? { emoji: "🗺️", label: "Alla" }
-                : CATEGORY_META[cat];
-            const isActive = filterCat === cat;
-            const count = categoryCounts[cat] ?? 0;
-            return (
-              <button
-                key={cat}
-                onClick={() => setFilterCat(cat)}
-                className="flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.15em] transition-all active:scale-95"
-                style={
-                  isActive
-                    ? { backgroundColor: brand, color: "#fff" }
-                    : {
-                        backgroundColor: "transparent",
-                        color: "#a8a29e",
-                        boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.06)",
-                      }
-                }
-              >
-                <span className="text-xs">{meta.emoji}</span>
-                {meta.label}
-                {count > 0 && (
-                  <span
-                    className="ml-0.5 text-[8px]"
-                    style={{ opacity: isActive ? 0.7 : 0.5 }}
-                  >
-                    {count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      {/* ━━━ MOBILE CATEGORY PILLS ━━━ */}
+      <MobileCategoryPills
+        availableCats={s.availableCats}
+        filterCat={s.filterCat}
+        categoryCounts={s.categoryCounts}
+        brand={s.brand}
+        onSelect={s.setFilterCat}
+      />
 
       {/* ━━━ ADD FORM ━━━ */}
-      {showAddForm && (
+      {s.showAddForm && (
         <AddPlaceForm
-          brand={brand}
-          isPending={isPending}
-          newName={newName}
-          setNewName={setNewName}
-          newCategory={newCategory}
-          setNewCategory={setNewCategory}
-          newAddress={newAddress}
-          setNewAddress={setNewAddress}
-          newIsOnSite={newIsOnSite}
-          setNewIsOnSite={setNewIsOnSite}
-          newIsIndoor={newIsIndoor}
-          setNewIsIndoor={setNewIsIndoor}
-          newCustomHours={newCustomHours}
-          setNewCustomHours={setNewCustomHours}
-          isAddFormValid={isAddFormValid}
-          onAdd={handleAddPlace}
-          onClose={() => setShowAddForm(false)}
+          brand={s.brand}
+          isPending={s.isPending}
+          name={s.newName}
+          onNameChange={s.setNewName}
+          category={s.newCategory}
+          onCategoryChange={s.setNewCategory}
+          address={s.newAddress}
+          onAddressChange={s.setNewAddress}
+          isOnSite={s.newIsOnSite}
+          onToggleIsOnSite={s.toggleNewIsOnSite}
+          isIndoor={s.newIsIndoor}
+          onToggleIsIndoor={s.toggleNewIsIndoor}
+          customHours={s.newCustomHours}
+          onCustomHoursChange={s.setNewCustomHours}
+          isValid={s.isAddFormValid}
+          onAdd={s.handleAddPlace}
+          onClose={s.closeAddForm}
         />
       )}
 
-      {/* ━━━ DESKTOP: SIDEBAR + GRID  |  MOBILE: LIST ━━━ */}
+      {/* ━━━ DESKTOP SIDEBAR + GRID ━━━ */}
       <div className="flex gap-6">
-        {/* ── Desktop sidebar (hidden on mobile) ── */}
-        <aside className="hidden w-56 shrink-0 lg:block">
-          <div className="sticky top-4 space-y-1">
-            {/* All */}
-            <SidebarButton
-              emoji="🗺️"
-              label="Alla platser"
-              count={categoryCounts.all ?? 0}
-              isActive={filterCat === "all"}
-              brand={brand}
-              onClick={() => setFilterCat("all")}
-            />
+        <DesktopSidebar
+          filterCat={s.filterCat}
+          categoryCounts={s.categoryCounts}
+          brand={s.brand}
+          onSelect={s.setFilterCat}
+        />
 
-            <div className="my-2 h-px bg-stone-100" />
-
-            {/* Grouped categories */}
-            {CATEGORY_GROUPS.map((group) => {
-              const groupCats = group.categories.filter(
-                (c) => (categoryCounts[c] ?? 0) > 0,
-              );
-              if (groupCats.length === 0) return null;
-
-              return (
-                <div key={group.label} className="pb-2">
-                  <p className="mb-1 px-2 pt-2 text-[9px] font-black uppercase tracking-[0.2em] text-stone-300">
-                    {group.label}
-                  </p>
-                  {groupCats.map((cat) => (
-                    <SidebarButton
-                      key={cat}
-                      emoji={CATEGORY_META[cat].emoji}
-                      label={CATEGORY_META[cat].label}
-                      count={categoryCounts[cat] ?? 0}
-                      isActive={filterCat === cat}
-                      brand={brand}
-                      onClick={() => setFilterCat(cat)}
-                    />
-                  ))}
-                </div>
-              );
-            })}
-          </div>
-        </aside>
-
-        {/* ── Main content ── */}
         <div className="min-w-0 flex-1">
-          <div className="mb-2 flex items-center justify-between px-1">
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-300">
-              {filtered.length} {filtered.length === 1 ? "plats" : "platser"}
-              {filterCat !== "all" && (
-                <span className="ml-1.5 normal-case tracking-normal">
-                  i{" "}
-                  {CATEGORY_META[filterCat]?.label?.toLowerCase() ?? filterCat}
-                </span>
-              )}
-            </p>
-            {filterCat !== "all" && (
-              <button
-                onClick={() => setFilterCat("all")}
-                className="flex items-center gap-1 text-[10px] font-bold text-stone-400 transition-colors hover:text-stone-600"
-              >
-                <X size={10} />
-                Rensa filter
-              </button>
-            )}
-          </div>
+          <FilterStatus
+            count={s.filtered.length}
+            filterCat={s.filterCat}
+            onClear={s.clearFilter}
+          />
 
-          {filtered.length > 0 ? (
+          {s.filtered.length > 0 ? (
             <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
-              {filtered.map((place) => (
+              {s.filtered.map((place) => (
                 <PlaceCard
                   key={place.id}
                   place={place}
-                  brand={brand}
-                  isPending={isPending}
-                  actioningId={actioningId}
-                  editingNoteId={editingNoteId}
-                  editingNoteText={editingNoteText}
-                  editingDetailsId={editingDetailsId}
-                  editIsOnSite={editIsOnSite}
-                  editIsIndoor={editIsIndoor}
-                  editCustomHours={editCustomHours}
-                  setEditingNoteId={setEditingNoteId}
-                  setEditingNoteText={setEditingNoteText}
-                  setEditIsOnSite={setEditIsOnSite}
-                  setEditIsIndoor={setEditIsIndoor}
-                  setEditCustomHours={setEditCustomHours}
-                  onSaveNote={handleSaveNote}
-                  onSaveDetails={handleSaveDetails}
-                  onDelete={handleDelete}
-                  onStartEditDetails={startEditingDetails}
-                  setEditingDetailsId={setEditingDetailsId}
-                  withAction={withAction}
+                  brand={s.brand}
+                  isBusy={s.actioningId === place.id}
+                  isPending={s.isPending}
+                  isEditingNote={s.editingNoteId === place.id}
+                  noteText={s.editingNoteText}
+                  onNoteTextChange={s.setEditingNoteText}
+                  onToggleNoteEdit={() => s.handleToggleNoteEdit(place)}
+                  onCancelNoteEdit={s.handleCancelNoteEdit}
+                  onSaveNote={() => s.handleSaveNote(place.id)}
+                  isEditingDetails={s.editingDetailsId === place.id}
+                  isEditDetailsValid={s.getIsEditDetailsValid(place)}
+                  editIsOnSite={s.editIsOnSite}
+                  onToggleEditIsOnSite={s.toggleEditIsOnSite}
+                  editIsIndoor={s.editIsIndoor}
+                  onToggleEditIsIndoor={s.toggleEditIsIndoor}
+                  editCustomHours={s.editCustomHours}
+                  onEditCustomHoursChange={s.setEditCustomHours}
+                  onToggleDetailsEdit={() => s.handleToggleDetailsEdit(place)}
+                  onCancelDetailsEdit={s.handleCancelDetailsEdit}
+                  onSaveDetails={() => s.handleSaveDetails(place.id)}
+                  onTogglePin={() =>
+                    s.handleTogglePin(place.id, place.is_pinned)
+                  }
+                  onToggleHide={() =>
+                    s.handleToggleHide(place.id, place.is_hidden)
+                  }
+                  onDelete={() => s.handleDelete(place.id, place.name)}
                 />
               ))}
             </div>
           ) : (
-            <div className="rounded-[20px] bg-white px-6 py-8 text-center ring-1 ring-stone-200/60">
-              <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-stone-50 ring-1 ring-stone-200/60">
-                <MapPin
-                  size={18}
-                  strokeWidth={1.5}
-                  className="text-stone-300"
-                />
-              </div>
-              <p className="text-[13px] font-black tracking-tight text-stone-700">
-                {search ? "Inga träffar" : "Inga platser"}
-              </p>
-              <p className="mx-auto mt-1 max-w-[200px] text-[11px] leading-relaxed text-stone-400">
-                {search
-                  ? "Prova ett annat sökord."
-                  : 'Klicka på "Ny plats" för att lägga till din första!'}
-              </p>
-            </div>
+            <EmptyState hasSearch={!!s.search} />
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+   Mobile Category Pills
+   ═══════════════════════════════════════════════════════ */
+function MobileCategoryPills({
+  availableCats,
+  filterCat,
+  categoryCounts,
+  brand,
+  onSelect,
+}: {
+  availableCats: (PlaceCategory | "all")[];
+  filterCat: PlaceCategory | "all";
+  categoryCounts: Record<string, number>;
+  brand: string;
+  onSelect: (cat: PlaceCategory | "all") => void;
+}) {
+  return (
+    <div className="lg:hidden">
+      <div
+        className="flex gap-1 overflow-x-auto pb-1"
+        style={{
+          WebkitOverflowScrolling: "touch",
+          scrollbarWidth: "none",
+          msOverflowStyle: "none",
+        }}
+      >
+        {availableCats.map((cat) => {
+          const meta =
+            cat === "all" ? { emoji: "🗺️", label: "Alla" } : CATEGORY_META[cat];
+          const isActive = filterCat === cat;
+          const count = categoryCounts[cat] ?? 0;
+          return (
+            <button
+              key={cat}
+              onClick={() => onSelect(cat)}
+              className="flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.15em] transition-all active:scale-95"
+              style={
+                isActive
+                  ? { backgroundColor: brand, color: "#fff" }
+                  : {
+                      backgroundColor: "transparent",
+                      color: "#a8a29e",
+                      boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.06)",
+                    }
+              }
+            >
+              <span className="text-xs">{meta.emoji}</span>
+              {meta.label}
+              {count > 0 && (
+                <span
+                  className="ml-0.5 text-[8px]"
+                  style={{ opacity: isActive ? 0.7 : 0.5 }}
+                >
+                  {count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+   Desktop Sidebar
+   ═══════════════════════════════════════════════════════ */
+function DesktopSidebar({
+  filterCat,
+  categoryCounts,
+  brand,
+  onSelect,
+}: {
+  filterCat: PlaceCategory | "all";
+  categoryCounts: Record<string, number>;
+  brand: string;
+  onSelect: (cat: PlaceCategory | "all") => void;
+}) {
+  return (
+    <aside className="hidden w-56 shrink-0 lg:block">
+      <div className="sticky top-4 space-y-1">
+        <SidebarButton
+          emoji="🗺️"
+          label="Alla platser"
+          count={categoryCounts.all ?? 0}
+          isActive={filterCat === "all"}
+          brand={brand}
+          onClick={() => onSelect("all")}
+        />
+
+        <div className="my-2 h-px bg-stone-100" />
+
+        {CATEGORY_GROUPS.map((group) => {
+          const groupCats = group.categories.filter(
+            (c) => (categoryCounts[c] ?? 0) > 0,
+          );
+          if (groupCats.length === 0) return null;
+
+          return (
+            <div key={group.label} className="pb-2">
+              <p className="mb-1 px-2 pt-2 text-[9px] font-black uppercase tracking-[0.2em] text-stone-300">
+                {group.label}
+              </p>
+              {groupCats.map((cat) => (
+                <SidebarButton
+                  key={cat}
+                  emoji={CATEGORY_META[cat].emoji}
+                  label={CATEGORY_META[cat].label}
+                  count={categoryCounts[cat] ?? 0}
+                  isActive={filterCat === cat}
+                  brand={brand}
+                  onClick={() => onSelect(cat)}
+                />
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    </aside>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+   Filter Status Bar
+   ═══════════════════════════════════════════════════════ */
+function FilterStatus({
+  count,
+  filterCat,
+  onClear,
+}: {
+  count: number;
+  filterCat: PlaceCategory | "all";
+  onClear: () => void;
+}) {
+  return (
+    <div className="mb-2 flex items-center justify-between px-1">
+      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-300">
+        {count} {count === 1 ? "plats" : "platser"}
+        {filterCat !== "all" && (
+          <span className="ml-1.5 normal-case tracking-normal">
+            i {CATEGORY_META[filterCat]?.label?.toLowerCase() ?? filterCat}
+          </span>
+        )}
+      </p>
+      {filterCat !== "all" && (
+        <button
+          onClick={onClear}
+          className="flex items-center gap-1 text-[10px] font-bold text-stone-400 transition-colors hover:text-stone-600"
+        >
+          <X size={10} />
+          Rensa filter
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+   Empty State
+   ═══════════════════════════════════════════════════════ */
+function EmptyState({ hasSearch }: { hasSearch: boolean }) {
+  return (
+    <div className="rounded-[20px] bg-white px-6 py-8 text-center ring-1 ring-stone-200/60">
+      <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-stone-50 ring-1 ring-stone-200/60">
+        <MapPin size={18} strokeWidth={1.5} className="text-stone-300" />
+      </div>
+      <p className="text-[13px] font-black tracking-tight text-stone-700">
+        {hasSearch ? "Inga träffar" : "Inga platser"}
+      </p>
+      <p className="mx-auto mt-1 max-w-[200px] text-[11px] leading-relaxed text-stone-400">
+        {hasSearch
+          ? "Prova ett annat sökord."
+          : 'Klicka på "Ny plats" för att lägga till din första!'}
+      </p>
     </div>
   );
 }
@@ -513,14 +422,8 @@ function SidebarButton({
       className="flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left transition-all active:scale-[0.98]"
       style={
         isActive
-          ? {
-              backgroundColor: hexToRgba(brand, 0.07),
-              color: brand,
-            }
-          : {
-              backgroundColor: "transparent",
-              color: "#78716c",
-            }
+          ? { backgroundColor: hexToRgba(brand, 0.07), color: brand }
+          : { backgroundColor: "transparent", color: "#78716c" }
       }
     >
       <span className="text-sm">{emoji}</span>
@@ -534,14 +437,8 @@ function SidebarButton({
         className="min-w-[20px] rounded-full px-1.5 py-0.5 text-center text-[9px] font-black"
         style={
           isActive
-            ? {
-                backgroundColor: hexToRgba(brand, 0.12),
-                color: brand,
-              }
-            : {
-                backgroundColor: "#f5f5f4",
-                color: "#a8a29e",
-              }
+            ? { backgroundColor: hexToRgba(brand, 0.12), color: brand }
+            : { backgroundColor: "#f5f5f4", color: "#a8a29e" }
         }
       >
         {count}
@@ -551,73 +448,75 @@ function SidebarButton({
 }
 
 /* ═══════════════════════════════════════════════════════
-   Place Card (extracted for grid layout)
+   Place Card
    ═══════════════════════════════════════════════════════ */
+interface PlaceCardProps {
+  place: CachedPlace;
+  brand: string;
+  isBusy: boolean;
+  isPending: boolean;
+  // Note editing
+  isEditingNote: boolean;
+  noteText: string;
+  onNoteTextChange: (v: string) => void;
+  onToggleNoteEdit: () => void;
+  onCancelNoteEdit: () => void;
+  onSaveNote: () => void;
+  // Details editing
+  isEditingDetails: boolean;
+  isEditDetailsValid: boolean;
+  editIsOnSite: boolean;
+  onToggleEditIsOnSite: () => void;
+  editIsIndoor: boolean;
+  onToggleEditIsIndoor: () => void;
+  editCustomHours: string;
+  onEditCustomHoursChange: (v: string) => void;
+  onToggleDetailsEdit: () => void;
+  onCancelDetailsEdit: () => void;
+  onSaveDetails: () => void;
+  // Actions
+  onTogglePin: () => void;
+  onToggleHide: () => void;
+  onDelete: () => void;
+}
+
 function PlaceCard({
   place,
   brand,
+  isBusy,
   isPending,
-  actioningId,
-  editingNoteId,
-  editingNoteText,
-  editingDetailsId,
-  editIsOnSite,
-  editIsIndoor,
-  editCustomHours,
-  setEditingNoteId,
-  setEditingNoteText,
-  setEditIsOnSite,
-  setEditIsIndoor,
-  setEditCustomHours,
+  isEditingNote,
+  noteText,
+  onNoteTextChange,
+  onToggleNoteEdit,
+  onCancelNoteEdit,
   onSaveNote,
+  isEditingDetails,
+  isEditDetailsValid,
+  editIsOnSite,
+  onToggleEditIsOnSite,
+  editIsIndoor,
+  onToggleEditIsIndoor,
+  editCustomHours,
+  onEditCustomHoursChange,
+  onToggleDetailsEdit,
+  onCancelDetailsEdit,
   onSaveDetails,
+  onTogglePin,
+  onToggleHide,
   onDelete,
-  onStartEditDetails,
-  setEditingDetailsId,
-  withAction,
-}: {
-  place: CachedPlace;
-  brand: string;
-  isPending: boolean;
-  actioningId: string | null;
-  editingNoteId: string | null;
-  editingNoteText: string;
-  editingDetailsId: string | null;
-  editIsOnSite: boolean;
-  editIsIndoor: boolean;
-  editCustomHours: string;
-  setEditingNoteId: (id: string | null) => void;
-  setEditingNoteText: (text: string) => void;
-  setEditIsOnSite: (v: boolean) => void;
-  setEditIsIndoor: (v: boolean) => void;
-  setEditCustomHours: (v: string) => void;
-  onSaveNote: (id: string) => void;
-  onSaveDetails: (id: string) => void;
-  onDelete: (id: string, name: string) => void;
-  onStartEditDetails: (place: CachedPlace) => void;
-  setEditingDetailsId: (id: string | null) => void;
-  withAction: (id: string, action: () => Promise<void>) => void;
-}) {
+}: PlaceCardProps) {
   const meta =
     CATEGORY_META[place.category as PlaceCategory] || CATEGORY_META.other;
-  const busy = actioningId === place.id;
-  const editingNote = editingNoteId === place.id;
-  const editingDetails = editingDetailsId === place.id;
-
-  const hasCoordinates = Boolean(place.latitude && place.longitude);
-  const hasAddress = Boolean(place.address);
-  const isEditDetailsValid = hasAddress || hasCoordinates || editIsOnSite;
 
   return (
     <div
       className={`rounded-[14px] p-3.5 ring-1 ring-stone-200/60 transition-all ${
         place.is_hidden ? "bg-stone-50/60 opacity-50" : "bg-white"
-      } ${busy ? "opacity-40" : ""}`}
+      } ${isBusy ? "opacity-40" : ""}`}
       style={
         place.is_pinned
-          ? {
-              boxShadow: `inset 0 0 0 1px ${hexToRgba(brand, 0.1)}`,
-            }
+          ? { boxShadow: `inset 0 0 0 1px ${hexToRgba(brand, 0.1)}` }
           : undefined
       }
     >
@@ -684,7 +583,7 @@ function PlaceCard({
             </p>
           )}
 
-          {place.owner_note && !editingNote && (
+          {place.owner_note && !isEditingNote && (
             <p className="mt-1 text-[10px] font-medium italic text-stone-400">
               &ldquo;{place.owner_note}&rdquo;
             </p>
@@ -698,10 +597,8 @@ function PlaceCard({
             isActive={place.is_pinned}
             activeBg={hexToRgba(brand, 0.08)}
             activeColor={brand}
-            onClick={() =>
-              withAction(place.id, () => togglePin(place.id, place.is_pinned))
-            }
-            disabled={busy}
+            onClick={onTogglePin}
+            disabled={isBusy}
           >
             <Star size={13} fill={place.is_pinned ? "currentColor" : "none"} />
           </PlaceAction>
@@ -711,44 +608,28 @@ function PlaceCard({
             isActive={place.is_hidden}
             activeBg="rgba(168,162,158,0.08)"
             activeColor="#78716c"
-            onClick={() =>
-              withAction(place.id, () => toggleHide(place.id, place.is_hidden))
-            }
-            disabled={busy}
+            onClick={onToggleHide}
+            disabled={isBusy}
           >
             {place.is_hidden ? <Eye size={13} /> : <EyeOff size={13} />}
           </PlaceAction>
 
           <PlaceAction
             title="Skriv tips till gästerna"
-            isActive={editingNote}
+            isActive={isEditingNote}
             activeBg={hexToRgba(brand, 0.08)}
             activeColor={brand}
-            onClick={() => {
-              if (editingNote) {
-                setEditingNoteId(null);
-              } else {
-                setEditingNoteId(place.id);
-                setEditingNoteText(place.owner_note || "");
-                setEditingDetailsId(null);
-              }
-            }}
+            onClick={onToggleNoteEdit}
           >
             <MessageCircle size={13} />
           </PlaceAction>
 
           <PlaceAction
             title="Öppettider & plats"
-            isActive={editingDetails}
+            isActive={isEditingDetails}
             activeBg={hexToRgba(brand, 0.08)}
             activeColor={brand}
-            onClick={() => {
-              if (editingDetails) {
-                setEditingDetailsId(null);
-              } else {
-                onStartEditDetails(place);
-              }
-            }}
+            onClick={onToggleDetailsEdit}
           >
             <Clock size={13} />
           </PlaceAction>
@@ -756,8 +637,8 @@ function PlaceCard({
           {!place.google_place_id && (
             <PlaceAction
               title="Ta bort"
-              onClick={() => onDelete(place.id, place.name)}
-              disabled={busy}
+              onClick={onDelete}
+              disabled={isBusy}
               dangerHover
             >
               <Trash2 size={13} />
@@ -767,12 +648,12 @@ function PlaceCard({
       </div>
 
       {/* Note editor */}
-      {editingNote && (
+      {isEditingNote && (
         <div className="mt-2.5 flex gap-1.5 pl-11">
           <input
             type="text"
-            value={editingNoteText}
-            onChange={(e) => setEditingNoteText(e.target.value)}
+            value={noteText}
+            onChange={(e) => onNoteTextChange(e.target.value)}
             placeholder="Skriv ett tips till gästerna..."
             autoFocus
             className="flex-1 rounded-[8px] bg-white px-3 py-2 text-[11px] font-medium text-stone-700 ring-1 ring-stone-200/60 placeholder:text-stone-300 focus:outline-none focus:ring-2"
@@ -782,12 +663,12 @@ function PlaceCard({
               } as React.CSSProperties
             }
             onKeyDown={(e) => {
-              if (e.key === "Enter") onSaveNote(place.id);
-              if (e.key === "Escape") setEditingNoteId(null);
+              if (e.key === "Enter") onSaveNote();
+              if (e.key === "Escape") onCancelNoteEdit();
             }}
           />
           <button
-            onClick={() => onSaveNote(place.id)}
+            onClick={onSaveNote}
             disabled={isPending}
             className="flex items-center gap-1 rounded-full px-3.5 py-2 text-[10px] font-black uppercase tracking-[0.1em] text-white transition-all active:scale-95"
             style={{
@@ -795,7 +676,7 @@ function PlaceCard({
               boxShadow: `0 2px 8px ${hexToRgba(brand, 0.18)}`,
             }}
           >
-            {busy ? (
+            {isBusy ? (
               <Loader2 size={11} className="animate-spin" />
             ) : (
               <Check size={11} strokeWidth={2.5} />
@@ -806,154 +687,194 @@ function PlaceCard({
       )}
 
       {/* Details editor */}
-      {editingDetails && (
-        <div className="mt-3 space-y-2.5 rounded-[10px] bg-stone-50/80 p-3 pl-11">
-          <button
-            onClick={() => setEditIsOnSite(!editIsOnSite)}
-            className="flex w-full items-center gap-3 rounded-[8px] bg-white p-2.5 ring-1 ring-stone-200/60"
-          >
-            <div
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] transition-colors"
-              style={
-                editIsOnSite
-                  ? {
-                      backgroundColor: hexToRgba(brand, 0.1),
-                      color: brand,
-                    }
-                  : { backgroundColor: "#f5f5f4", color: "#a8a29e" }
-              }
-            >
-              <Home size={12} strokeWidth={2} />
-            </div>
-            <div className="flex-1 text-left">
-              <p className="text-[10px] font-bold text-stone-700">
-                På campingområdet
-              </p>
-            </div>
-            <ToggleSwitch active={editIsOnSite} brand={brand} />
-          </button>
-
-          <button
-            onClick={() => setEditIsIndoor(!editIsIndoor)}
-            className="flex w-full items-center gap-3 rounded-[8px] bg-white p-2.5 ring-1 ring-stone-200/60"
-          >
-            <div
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] transition-colors"
-              style={
-                editIsIndoor
-                  ? {
-                      backgroundColor: hexToRgba(brand, 0.1),
-                      color: brand,
-                    }
-                  : { backgroundColor: "#f5f5f4", color: "#a8a29e" }
-              }
-            >
-              <Umbrella size={12} strokeWidth={2} />
-            </div>
-            <div className="flex-1 text-left">
-              <p className="text-[10px] font-bold text-stone-700">
-                Inomhusaktivitet
-              </p>
-              <p className="text-[9px] text-stone-400">
-                Föreslås vid regn av AI-planeraren
-              </p>
-            </div>
-            <ToggleSwitch active={editIsIndoor} brand={brand} />
-          </button>
-
-          <div>
-            <label className="mb-1 block text-[9px] font-black uppercase tracking-[0.2em] text-stone-400">
-              Öppettider
-            </label>
-            <input
-              type="text"
-              value={editCustomHours}
-              onChange={(e) => setEditCustomHours(e.target.value)}
-              placeholder="T.ex. 09:00–18:00"
-              className="w-full rounded-[8px] bg-white px-3 py-2 text-[11px] font-medium text-stone-700 ring-1 ring-stone-200/60 placeholder:text-stone-300 focus:outline-none focus:ring-2"
-              style={
-                {
-                  "--tw-ring-color": hexToRgba(brand, 0.25),
-                } as React.CSSProperties
-              }
-            />
-          </div>
-
-          <div className="flex flex-col gap-2 pt-1">
-            {!isEditDetailsValid && (
-              <p className="text-right text-[9px] font-medium text-red-500">
-                Platsen måste ha en adress eller vara &ldquo;På
-                campingområdet&rdquo;.
-              </p>
-            )}
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setEditingDetailsId(null)}
-                className="rounded-full px-3.5 py-2 text-[10px] font-black uppercase tracking-[0.1em] text-stone-400 transition-colors hover:bg-white hover:text-stone-600"
-              >
-                Avbryt
-              </button>
-              <button
-                onClick={() => onSaveDetails(place.id)}
-                disabled={isPending || !isEditDetailsValid}
-                className="flex items-center gap-1 rounded-full px-3.5 py-2 text-[10px] font-black uppercase tracking-[0.1em] text-white transition-all active:scale-95 disabled:opacity-50"
-                style={{
-                  backgroundColor: brand,
-                  boxShadow: `0 2px 8px ${hexToRgba(brand, 0.18)}`,
-                }}
-              >
-                {busy ? (
-                  <Loader2 size={11} className="animate-spin" />
-                ) : (
-                  <Check size={11} strokeWidth={2.5} />
-                )}
-                Spara
-              </button>
-            </div>
-          </div>
-        </div>
+      {isEditingDetails && (
+        <DetailsEditor
+          brand={brand}
+          isPending={isPending}
+          isBusy={isBusy}
+          isValid={isEditDetailsValid}
+          isOnSite={editIsOnSite}
+          onToggleIsOnSite={onToggleEditIsOnSite}
+          isIndoor={editIsIndoor}
+          onToggleIsIndoor={onToggleEditIsIndoor}
+          customHours={editCustomHours}
+          onCustomHoursChange={onEditCustomHoursChange}
+          onCancel={onCancelDetailsEdit}
+          onSave={onSaveDetails}
+        />
       )}
     </div>
   );
 }
 
 /* ═══════════════════════════════════════════════════════
-   Add Place Form (extracted)
+   Details Editor (inline in PlaceCard)
+   ═══════════════════════════════════════════════════════ */
+function DetailsEditor({
+  brand,
+  isPending,
+  isBusy,
+  isValid,
+  isOnSite,
+  onToggleIsOnSite,
+  isIndoor,
+  onToggleIsIndoor,
+  customHours,
+  onCustomHoursChange,
+  onCancel,
+  onSave,
+}: {
+  brand: string;
+  isPending: boolean;
+  isBusy: boolean;
+  isValid: boolean;
+  isOnSite: boolean;
+  onToggleIsOnSite: () => void;
+  isIndoor: boolean;
+  onToggleIsIndoor: () => void;
+  customHours: string;
+  onCustomHoursChange: (v: string) => void;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  return (
+    <div className="mt-3 space-y-2.5 rounded-[10px] bg-stone-50/80 p-3 pl-11">
+      <button
+        onClick={onToggleIsOnSite}
+        className="flex w-full items-center gap-3 rounded-[8px] bg-white p-2.5 ring-1 ring-stone-200/60"
+      >
+        <div
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] transition-colors"
+          style={
+            isOnSite
+              ? { backgroundColor: hexToRgba(brand, 0.1), color: brand }
+              : { backgroundColor: "#f5f5f4", color: "#a8a29e" }
+          }
+        >
+          <Home size={12} strokeWidth={2} />
+        </div>
+        <div className="flex-1 text-left">
+          <p className="text-[10px] font-bold text-stone-700">
+            På campingområdet
+          </p>
+        </div>
+        <ToggleSwitch active={isOnSite} brand={brand} />
+      </button>
+
+      <button
+        onClick={onToggleIsIndoor}
+        className="flex w-full items-center gap-3 rounded-[8px] bg-white p-2.5 ring-1 ring-stone-200/60"
+      >
+        <div
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] transition-colors"
+          style={
+            isIndoor
+              ? { backgroundColor: hexToRgba(brand, 0.1), color: brand }
+              : { backgroundColor: "#f5f5f4", color: "#a8a29e" }
+          }
+        >
+          <Umbrella size={12} strokeWidth={2} />
+        </div>
+        <div className="flex-1 text-left">
+          <p className="text-[10px] font-bold text-stone-700">
+            Inomhusaktivitet
+          </p>
+          <p className="text-[9px] text-stone-400">
+            Föreslås vid regn av AI-planeraren
+          </p>
+        </div>
+        <ToggleSwitch active={isIndoor} brand={brand} />
+      </button>
+
+      <div>
+        <label className="mb-1 block text-[9px] font-black uppercase tracking-[0.2em] text-stone-400">
+          Öppettider
+        </label>
+        <input
+          type="text"
+          value={customHours}
+          onChange={(e) => onCustomHoursChange(e.target.value)}
+          placeholder="T.ex. 09:00–18:00"
+          className="w-full rounded-[8px] bg-white px-3 py-2 text-[11px] font-medium text-stone-700 ring-1 ring-stone-200/60 placeholder:text-stone-300 focus:outline-none focus:ring-2"
+          style={
+            { "--tw-ring-color": hexToRgba(brand, 0.25) } as React.CSSProperties
+          }
+        />
+      </div>
+
+      <div className="flex flex-col gap-2 pt-1">
+        {!isValid && (
+          <p className="text-right text-[9px] font-medium text-red-500">
+            Platsen måste ha en adress eller vara &ldquo;På
+            campingområdet&rdquo;.
+          </p>
+        )}
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            className="rounded-full px-3.5 py-2 text-[10px] font-black uppercase tracking-[0.1em] text-stone-400 transition-colors hover:bg-white hover:text-stone-600"
+          >
+            Avbryt
+          </button>
+          <button
+            onClick={onSave}
+            disabled={isPending || !isValid}
+            className="flex items-center gap-1 rounded-full px-3.5 py-2 text-[10px] font-black uppercase tracking-[0.1em] text-white transition-all active:scale-95 disabled:opacity-50"
+            style={{
+              backgroundColor: brand,
+              boxShadow: `0 2px 8px ${hexToRgba(brand, 0.18)}`,
+            }}
+          >
+            {isBusy ? (
+              <Loader2 size={11} className="animate-spin" />
+            ) : (
+              <Check size={11} strokeWidth={2.5} />
+            )}
+            Spara
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+   Add Place Form
    ═══════════════════════════════════════════════════════ */
 function AddPlaceForm({
   brand,
   isPending,
-  newName,
-  setNewName,
-  newCategory,
-  setNewCategory,
-  newAddress,
-  setNewAddress,
-  newIsOnSite,
-  setNewIsOnSite,
-  newIsIndoor,
-  setNewIsIndoor,
-  newCustomHours,
-  setNewCustomHours,
-  isAddFormValid,
+  name,
+  onNameChange,
+  category,
+  onCategoryChange,
+  address,
+  onAddressChange,
+  isOnSite,
+  onToggleIsOnSite,
+  isIndoor,
+  onToggleIsIndoor,
+  customHours,
+  onCustomHoursChange,
+  isValid,
   onAdd,
   onClose,
 }: {
   brand: string;
   isPending: boolean;
-  newName: string;
-  setNewName: (v: string) => void;
-  newCategory: PlaceCategory;
-  setNewCategory: (v: PlaceCategory) => void;
-  newAddress: string;
-  setNewAddress: (v: string) => void;
-  newIsOnSite: boolean;
-  setNewIsOnSite: (v: boolean) => void;
-  newIsIndoor: boolean;
-  setNewIsIndoor: (v: boolean) => void;
-  newCustomHours: string;
-  setNewCustomHours: (v: string) => void;
-  isAddFormValid: boolean;
+  name: string;
+  onNameChange: (v: string) => void;
+  category: PlaceCategory;
+  onCategoryChange: (v: PlaceCategory) => void;
+  address: string;
+  onAddressChange: (v: string) => void;
+  isOnSite: boolean;
+  onToggleIsOnSite: () => void;
+  isIndoor: boolean;
+  onToggleIsIndoor: () => void;
+  customHours: string;
+  onCustomHoursChange: (v: string) => void;
+  isValid: boolean;
   onAdd: () => void;
   onClose: () => void;
 }) {
@@ -974,14 +895,13 @@ function AddPlaceForm({
         </button>
       </div>
 
-      {/* Two-column layout on desktop */}
       <div className="space-y-2.5 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0">
         {/* Left column */}
         <div className="space-y-2.5">
           <input
             type="text"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
+            value={name}
+            onChange={(e) => onNameChange(e.target.value)}
             placeholder="Namn, t.ex. Minigolf eller Cykeluthyrning"
             className="w-full rounded-[10px] bg-white px-3.5 py-2.5 text-[12px] font-medium text-stone-800 ring-1 ring-stone-200/60 placeholder:text-stone-300 focus:outline-none focus:ring-2"
             style={
@@ -992,8 +912,8 @@ function AddPlaceForm({
           />
           <input
             type="text"
-            value={newAddress}
-            onChange={(e) => setNewAddress(e.target.value)}
+            value={address}
+            onChange={(e) => onAddressChange(e.target.value)}
             placeholder="Adress (krävs om inte på området)"
             className="w-full rounded-[10px] bg-white px-3.5 py-2.5 text-[12px] font-medium text-stone-800 ring-1 ring-stone-200/60 placeholder:text-stone-300 focus:outline-none focus:ring-2"
             style={
@@ -1003,7 +923,6 @@ function AddPlaceForm({
             }
           />
 
-          {/* Category selector — grid on desktop */}
           <div>
             <label className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.2em] text-stone-400">
               Kategori
@@ -1011,11 +930,11 @@ function AddPlaceForm({
             <div className="flex flex-wrap gap-1 lg:grid lg:grid-cols-3 lg:gap-1.5">
               {ALL_CATEGORIES.map((cat) => {
                 const m = CATEGORY_META[cat];
-                const isActive = newCategory === cat;
+                const isActive = category === cat;
                 return (
                   <button
                     key={cat}
-                    onClick={() => setNewCategory(cat)}
+                    onClick={() => onCategoryChange(cat)}
                     className="flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.1em] transition-all active:scale-95 lg:rounded-[8px] lg:justify-center"
                     style={
                       isActive
@@ -1040,17 +959,14 @@ function AddPlaceForm({
         <div className="space-y-2.5">
           <div className="rounded-[10px] bg-white p-3 ring-1 ring-stone-200/60">
             <button
-              onClick={() => setNewIsOnSite(!newIsOnSite)}
+              onClick={onToggleIsOnSite}
               className="flex w-full items-center gap-3"
             >
               <div
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] transition-colors"
                 style={
-                  newIsOnSite
-                    ? {
-                        backgroundColor: hexToRgba(brand, 0.1),
-                        color: brand,
-                      }
+                  isOnSite
+                    ? { backgroundColor: hexToRgba(brand, 0.1), color: brand }
                     : { backgroundColor: "#f5f5f4", color: "#a8a29e" }
                 }
               >
@@ -1064,23 +980,20 @@ function AddPlaceForm({
                   Gäster behöver inte köra
                 </p>
               </div>
-              <ToggleSwitch active={newIsOnSite} brand={brand} />
+              <ToggleSwitch active={isOnSite} brand={brand} />
             </button>
           </div>
 
           <div className="rounded-[10px] bg-white p-3 ring-1 ring-stone-200/60">
             <button
-              onClick={() => setNewIsIndoor(!newIsIndoor)}
+              onClick={onToggleIsIndoor}
               className="flex w-full items-center gap-3"
             >
               <div
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] transition-colors"
                 style={
-                  newIsIndoor
-                    ? {
-                        backgroundColor: hexToRgba(brand, 0.1),
-                        color: brand,
-                      }
+                  isIndoor
+                    ? { backgroundColor: hexToRgba(brand, 0.1), color: brand }
                     : { backgroundColor: "#f5f5f4", color: "#a8a29e" }
                 }
               >
@@ -1094,7 +1007,7 @@ function AddPlaceForm({
                   AI-planeraren föreslår vid dåligt väder
                 </p>
               </div>
-              <ToggleSwitch active={newIsIndoor} brand={brand} />
+              <ToggleSwitch active={isIndoor} brand={brand} />
             </button>
           </div>
 
@@ -1115,8 +1028,8 @@ function AddPlaceForm({
             </div>
             <input
               type="text"
-              value={newCustomHours}
-              onChange={(e) => setNewCustomHours(e.target.value)}
+              value={customHours}
+              onChange={(e) => onCustomHoursChange(e.target.value)}
               placeholder="T.ex. 09:00–18:00 eller Mån–Fre 10–17"
               className="w-full rounded-[8px] bg-stone-50 px-3 py-2 text-[11px] font-medium text-stone-700 ring-1 ring-stone-100 placeholder:text-stone-300 focus:outline-none focus:ring-2"
               style={
@@ -1129,11 +1042,10 @@ function AddPlaceForm({
         </div>
       </div>
 
-      {/* Add button — full width */}
       <div className="mt-4 flex flex-col gap-1.5">
         <button
           onClick={onAdd}
-          disabled={!isAddFormValid || isPending}
+          disabled={!isValid || isPending}
           className="flex w-full items-center justify-center gap-2 rounded-full py-2.5 text-[11px] font-black uppercase tracking-[0.1em] text-white transition-all active:scale-95 disabled:opacity-50 lg:w-auto lg:self-end lg:px-8"
           style={{
             backgroundColor: brand,
@@ -1148,7 +1060,7 @@ function AddPlaceForm({
           Lägg till
         </button>
 
-        {!isAddFormValid && newName.trim() !== "" && (
+        {!isValid && name.trim() !== "" && (
           <p className="text-center text-[10px] font-medium text-red-500 lg:text-right">
             Platsen måste ha en adress eller vara markerad som &ldquo;På
             campingområdet&rdquo;.
@@ -1160,7 +1072,7 @@ function AddPlaceForm({
 }
 
 /* ═══════════════════════════════════════════════════════
-   Shared Sub-Components
+   Shared Primitives
    ═══════════════════════════════════════════════════════ */
 
 function ToggleSwitch({ active, brand }: { active: boolean; brand: string }) {

@@ -1,5 +1,7 @@
 "use client";
 
+import { useSettingsForm, type SectionId } from "@/lib/hooks/useSettingsForm";
+import { hexToRgba } from "@/lib/utils";
 import type { Announcement, Campground } from "@/types/database";
 import {
   Check,
@@ -20,22 +22,7 @@ import {
   Wifi,
   X,
 } from "lucide-react";
-import React, { useState, useTransition } from "react";
-import {
-  createAnnouncement,
-  deleteAnnouncement,
-  updateAnnouncement,
-  updateCampgroundSettings,
-} from "../actions";
-
-/* ── Utility ─────────────────────────────────────────── */
-function hexToRgba(hex: string, alpha: number): string {
-  const clean = hex.replace("#", "");
-  const r = parseInt(clean.slice(0, 2), 16);
-  const g = parseInt(clean.slice(2, 4), 16);
-  const b = parseInt(clean.slice(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
+import React from "react";
 
 /* ── Constants ───────────────────────────────────────── */
 const ANNOUNCEMENT_TYPES = [
@@ -55,6 +42,25 @@ const COLOR_PRESETS = [
   { color: "#334155", label: "Granit" },
 ];
 
+const FOCAL_POSITIONS = [
+  "top left",
+  "top",
+  "top right",
+  "left",
+  "center",
+  "right",
+  "bottom left",
+  "bottom",
+  "bottom right",
+];
+
+const TABS: { id: SectionId; label: string; icon: React.ReactNode }[] = [
+  { id: "branding", label: "Branding", icon: <Palette size={14} /> },
+  { id: "contact", label: "Kontakt", icon: <Phone size={14} /> },
+  { id: "guest", label: "Gästinfo", icon: <Info size={14} /> },
+  { id: "announcements", label: "Anslag", icon: <Megaphone size={14} /> },
+];
+
 /* ── Props ───────────────────────────────────────────── */
 interface Props {
   campground: Campground;
@@ -63,164 +69,22 @@ interface Props {
 
 /* ── Main Component ──────────────────────────────────── */
 export default function SettingsForm({ campground, announcements }: Props) {
-  const [isPending, startTransition] = useTransition();
-  const [saved, setSaved] = useState(false);
-  const [activeSection, setActiveSection] = useState<
-    "branding" | "contact" | "guest" | "announcements"
-  >("branding");
-
-  const [primaryColor, setPrimaryColor] = useState(
-    campground.primary_color || "#2A3C34",
-  );
-
-  // ── Form state — Branding ──
-  const brand = primaryColor;
-  const [heroImage, setHeroImage] = useState(campground.hero_image_url || "");
-  const [logoImage, setLogoImage] = useState(campground.logo_url || "");
-  const [heroImagePosition, setHeroImagePosition] = useState(
-    (campground as any).hero_image_position || "center",
-  );
-
-  // ── Form state — Contact / Reception ──
-  const [phone, setPhone] = useState(campground.phone || "");
-  const [email, setEmail] = useState(campground.email || "");
-  const [website, setWebsite] = useState(campground.website || "");
-  const [address, setAddress] = useState(campground.address || "");
-  const [receptionHours, setReceptionHours] = useState(
-    campground.reception_hours || "",
-  );
-
-  // ── Form state — Guest info ──
-  const [wifiName, setWifiName] = useState(campground.wifi_name || "");
-  const [wifiPassword, setWifiPassword] = useState(
-    campground.wifi_password || "",
-  );
-  const [trashRules, setTrashRules] = useState(campground.trash_rules || "");
-  const [checkOutInfo, setCheckOutInfo] = useState(
-    campground.check_out_info || "",
-  );
-  const [emergencyInfo, setEmergencyInfo] = useState(
-    campground.emergency_info || "",
-  );
-  const [campRules, setCampRules] = useState(campground.camp_rules || "");
-
-  // ── Announcement form ──
-  const [newTitle, setNewTitle] = useState("");
-  const [newContent, setNewContent] = useState("");
-  const [newType, setNewType] = useState<"info" | "event" | "warning">("info");
-  const [showNewForm, setShowNewForm] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editTitle, setEditTitle] = useState("");
-  const [editContent, setEditContent] = useState("");
-  const [editType, setEditType] = useState<"info" | "event" | "warning">(
-    "info",
-  );
-
-  const handleSave = () => {
-    startTransition(async () => {
-      try {
-        await updateCampgroundSettings(campground.id, {
-          primary_color: primaryColor,
-          hero_image_url: heroImage.trim() || null,
-          hero_image_position: heroImagePosition || null,
-          logo_url: logoImage.trim() || null,
-          wifi_name: wifiName.trim() || null,
-          wifi_password: wifiPassword.trim() || null,
-          trash_rules: trashRules.trim() || null,
-          check_out_info: checkOutInfo.trim() || null,
-          emergency_info: emergencyInfo.trim() || null,
-          phone: phone.trim() || null,
-          email: email.trim() || null,
-          website: website.trim() || null,
-          address: address.trim() || null,
-          reception_hours: receptionHours.trim() || null,
-          camp_rules: campRules.trim() || null,
-        });
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2500);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Unknown error";
-        alert(`Fel: ${msg}`);
-      }
-    });
-  };
-
-  const handleCreateAnnouncement = () => {
-    if (!newTitle.trim() || !newContent.trim()) return;
-    startTransition(async () => {
-      try {
-        await createAnnouncement(campground.id, newTitle, newContent, newType);
-        setNewTitle("");
-        setNewContent("");
-        setNewType("info");
-        setShowNewForm(false);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Unknown error";
-        alert(`Fel: ${msg}`);
-      }
-    });
-  };
-
-  const handleStartEdit = (ann: Announcement) => {
-    setEditingId(ann.id);
-    setEditTitle(ann.title);
-    setEditContent(ann.content);
-    setEditType(ann.type as "info" | "event" | "warning");
-  };
-
-  const handleUpdateAnnouncement = () => {
-    if (!editingId || !editTitle.trim() || !editContent.trim()) return;
-    startTransition(async () => {
-      try {
-        await updateAnnouncement(editingId, editTitle, editContent, editType);
-        setEditingId(null);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Unknown error";
-        alert(`Fel: ${msg}`);
-      }
-    });
-  };
-
-  const handleDeleteAnnouncement = (id: string) => {
-    setDeletingId(id);
-    startTransition(async () => {
-      try {
-        await deleteAnnouncement(id);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Unknown error";
-        alert(`Fel: ${msg}`);
-      } finally {
-        setDeletingId(null);
-      }
-    });
-  };
-
-  const tabs = [
-    { id: "branding" as const, label: "Branding", icon: <Palette size={14} /> },
-    { id: "contact" as const, label: "Kontakt", icon: <Phone size={14} /> },
-    { id: "guest" as const, label: "Gästinfo", icon: <Info size={14} /> },
-    {
-      id: "announcements" as const,
-      label: "Anslag",
-      icon: <Megaphone size={14} />,
-    },
-  ];
+  const s = useSettingsForm({ campground, announcements });
 
   return (
     <div className="space-y-5">
       {/* ── TABS ── */}
       <div className="flex gap-1 rounded-full bg-stone-100/80 p-1">
-        {tabs.map((tab) => (
+        {TABS.map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setActiveSection(tab.id)}
+            onClick={() => s.setActiveSection(tab.id)}
             className="flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-all active:scale-95"
             style={
-              activeSection === tab.id
+              s.activeSection === tab.id
                 ? {
                     backgroundColor: "white",
-                    color: brand,
+                    color: s.brand,
                     boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
                   }
                 : { color: "#a8a29e" }
@@ -233,437 +97,635 @@ export default function SettingsForm({ campground, announcements }: Props) {
       </div>
 
       {/* ━━━ BRANDING ━━━ */}
-      {activeSection === "branding" && (
-        <div className="space-y-5">
-          {/* Signature Color Section */}
-          <div>
-            <SectionLabel label="Signaturfärg" />
-            <p className="mb-4 px-1 text-[11px] text-stone-400">
-              Välj en färg som representerar er camping. Den används i gästvyn
-              för knappar, ikoner och accenter.
-            </p>
-            <div className="mb-4 flex flex-wrap gap-1.5">
-              {COLOR_PRESETS.map((p) => (
-                <button
-                  key={p.color}
-                  onClick={() => setPrimaryColor(p.color)}
-                  className="flex items-center gap-1.5 rounded-full px-3 py-2 transition-all active:scale-95"
-                  style={{
-                    backgroundColor:
-                      primaryColor === p.color
-                        ? hexToRgba(p.color, 0.08)
-                        : "transparent",
-                    boxShadow:
-                      primaryColor === p.color
-                        ? `0 0 0 1.5px ${p.color}`
-                        : "inset 0 0 0 1px rgba(0,0,0,0.06)",
-                  }}
-                >
-                  <div
-                    className="h-4 w-4 rounded-full"
-                    style={{ backgroundColor: p.color }}
-                  />
-                  <span className="text-[10px] font-black uppercase tracking-[0.15em] text-stone-500">
-                    {p.label}
-                  </span>
-                </button>
-              ))}
-            </div>
-            <div className="mb-4 flex items-center gap-3 rounded-[14px] bg-stone-50/80 p-3">
-              <input
-                type="color"
-                value={primaryColor}
-                onChange={(e) => setPrimaryColor(e.target.value)}
-                className="h-10 w-12 cursor-pointer rounded-[10px] border-0 bg-transparent p-0.5"
-              />
-              <input
-                type="text"
-                value={primaryColor}
-                onChange={(e) => setPrimaryColor(e.target.value)}
-                className="w-24 rounded-[10px] bg-white px-3 py-2 font-mono text-[12px] font-black text-stone-700 ring-1 ring-stone-200/60 focus:outline-none focus:ring-2"
-                style={
-                  { "--tw-ring-color": hexToRgba(primaryColor, 0.3) } as any
-                }
-              />
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-300">
-                Egen hex
-              </span>
-            </div>
-          </div>
-
-          {/* Hero Image Section with Safe Zone Preview */}
-          <div className="border-t border-stone-100 pt-2">
-            <SectionLabel label="Bilder & Design" />
-            <div className="space-y-3">
-              <FieldGroup
-                icon={<ImageIcon size={14} />}
-                label="Hero Image (Bakgrund)"
-                brand={brand}
-              >
-                <FormInput
-                  value={heroImage}
-                  onChange={setHeroImage}
-                  placeholder="https://exempel.se/bild.jpg"
-                  brand={brand}
-                />
-
-                {heroImage && (
-                  <div className="mt-4 space-y-4">
-                    {/* Positioned Preview with Safe Zone Overlay */}
-                    <div className="relative h-44 w-full overflow-hidden rounded-[16px] ring-1 ring-stone-200 bg-stone-100 group">
-                      <img
-                        src={heroImage}
-                        alt="Hero preview"
-                        className="h-full w-full object-cover transition-all duration-500 ease-in-out"
-                        style={{ objectPosition: heroImagePosition }}
-                      />
-
-                      {/* Safe Zone: The exact area where text sits in the Guest App */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
-                      <div className="absolute inset-x-0 bottom-0 p-4 pointer-events-none">
-                        <div className="h-2 w-24 bg-white/30 rounded-full mb-1.5 animate-pulse" />
-                        <div className="h-5 w-48 bg-white/40 rounded-lg" />
-                        <div className="mt-3 flex gap-2">
-                          <div className="h-6 w-16 bg-white/10 rounded-full border border-white/10" />
-                          <div className="h-6 w-16 bg-white/10 rounded-full border border-white/10" />
-                        </div>
-                      </div>
-
-                      {/* Warning Label */}
-                      {/* Warning Label - Updated for a smaller footprint */}
-                      <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-stone-900/90 text-[7px] font-black uppercase tracking-wider text-white backdrop-blur-sm">
-                        <Target size={8} className="text-red-400" />
-                        Textområde
-                      </div>
-                    </div>
-
-                    {/* Focal Point Picker Grid */}
-                    <div className="flex items-start gap-4">
-                      <div className="grid grid-cols-3 gap-1.5 rounded-xl bg-stone-100 p-2 ring-1 ring-stone-200/50">
-                        {[
-                          "top left",
-                          "top",
-                          "top right",
-                          "left",
-                          "center",
-                          "right",
-                          "bottom left",
-                          "bottom",
-                          "bottom right",
-                        ].map((pos) => (
-                          <button
-                            key={pos}
-                            type="button"
-                            onClick={() => setHeroImagePosition(pos)}
-                            className={`group relative h-8 w-8 rounded-lg transition-all ${
-                              heroImagePosition === pos
-                                ? "bg-white shadow-md scale-110"
-                                : "hover:bg-white/50"
-                            }`}
-                          >
-                            <div
-                              className={`absolute inset-0 m-auto h-1.5 w-1.5 rounded-full transition-all ${
-                                heroImagePosition === pos
-                                  ? ""
-                                  : "bg-stone-300 group-hover:bg-stone-400"
-                              }`}
-                              style={{
-                                backgroundColor:
-                                  heroImagePosition === pos ? brand : undefined,
-                              }}
-                            />
-                          </button>
-                        ))}
-                      </div>
-                      <div className="flex-1 pt-1">
-                        <p className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">
-                          Bildfokus
-                        </p>
-                        <p className="text-[9px] text-stone-400 leading-relaxed mt-1">
-                          Använd rutnätet för att flytta bilden. <br />
-                          Om någons ansikte täcks av texten, välj <b>
-                            "top"
-                          </b>{" "}
-                          för att flytta upp fokus.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </FieldGroup>
-
-              <FieldGroup
-                icon={<ImageIcon size={14} />}
-                label="Logotyp"
-                brand={brand}
-              >
-                <FormInput
-                  value={logoImage}
-                  onChange={setLogoImage}
-                  placeholder="https://exempel.se/logga.png"
-                  brand={brand}
-                />
-              </FieldGroup>
-            </div>
-          </div>
-
-          <SaveBtn
-            onClick={handleSave}
-            isPending={isPending}
-            saved={saved}
-            brand={primaryColor}
-          />
-        </div>
+      {s.activeSection === "branding" && (
+        <BrandingSection
+          brand={s.brand}
+          primaryColor={s.primaryColor}
+          setPrimaryColor={s.setPrimaryColor}
+          heroImage={s.heroImage}
+          setHeroImage={s.setHeroImage}
+          logoImage={s.logoImage}
+          setLogoImage={s.setLogoImage}
+          heroImagePosition={s.heroImagePosition}
+          setHeroImagePosition={s.setHeroImagePosition}
+          onSave={s.handleSave}
+          isPending={s.isPending}
+          saved={s.saved}
+        />
       )}
 
       {/* ━━━ CONTACT / RECEPTION ━━━ */}
-      {activeSection === "contact" && (
-        <div className="space-y-5">
-          <SectionLabel label="Kontakt & Reception" />
-          <div className="space-y-3">
-            <FieldGroup
-              icon={<Phone size={14} />}
-              label="Telefonnummer"
-              brand={brand}
-            >
-              <FormInput
-                value={phone}
-                onChange={setPhone}
-                placeholder="0123-456 78"
-                brand={brand}
-              />
-            </FieldGroup>
-            <FieldGroup icon={<Globe size={14} />} label="E-post" brand={brand}>
-              <FormInput
-                value={email}
-                onChange={setEmail}
-                placeholder="info@camping.se"
-                brand={brand}
-              />
-            </FieldGroup>
-            <FieldGroup
-              icon={<MapPin size={14} />}
-              label="Adress"
-              brand={brand}
-            >
-              <FormInput
-                value={address}
-                onChange={setAddress}
-                placeholder="Strandvägen 1..."
-                brand={brand}
-              />
-            </FieldGroup>
-            <FieldGroup
-              icon={<Clock size={14} />}
-              label="Öppettider"
-              brand={brand}
-            >
-              <FormTextArea
-                value={receptionHours}
-                onChange={setReceptionHours}
-                placeholder="Måndag-Fredag: 08:00-20:00"
-                rows={3}
-                brand={brand}
-              />
-            </FieldGroup>
-          </div>
-          <SaveBtn
-            onClick={handleSave}
-            isPending={isPending}
-            saved={saved}
-            brand={brand}
-          />
-        </div>
+      {s.activeSection === "contact" && (
+        <ContactSection
+          brand={s.brand}
+          phone={s.phone}
+          setPhone={s.setPhone}
+          email={s.email}
+          setEmail={s.setEmail}
+          address={s.address}
+          setAddress={s.setAddress}
+          receptionHours={s.receptionHours}
+          setReceptionHours={s.setReceptionHours}
+          onSave={s.handleSave}
+          isPending={s.isPending}
+          saved={s.saved}
+        />
       )}
 
       {/* ━━━ GUEST INFO ━━━ */}
-      {activeSection === "guest" && (
-        <div className="space-y-5">
-          <SectionLabel label="Gästinformation" />
-          <div className="space-y-3">
-            <FieldGroup icon={<Wifi size={14} />} label="Wi-Fi" brand={brand}>
-              <div className="grid grid-cols-2 gap-2">
-                <FormInput
-                  label="Nätverk"
-                  value={wifiName}
-                  onChange={setWifiName}
-                  placeholder="CampingGuest"
-                  brand={brand}
-                />
-                <FormInput
-                  label="Lösenord"
-                  value={wifiPassword}
-                  onChange={setWifiPassword}
-                  placeholder="sommar2025"
-                  brand={brand}
-                />
-              </div>
-            </FieldGroup>
-            <FieldGroup
-              icon={<Clock size={14} />}
-              label="Utcheckning"
-              brand={brand}
-            >
-              <FormTextArea
-                value={checkOutInfo}
-                onChange={setCheckOutInfo}
-                placeholder="Utcheckning senast kl 12:00..."
-                rows={2}
-                brand={brand}
-              />
-            </FieldGroup>
-            <FieldGroup
-              icon={<Trash2 size={14} />}
-              label="Sopsortering"
-              brand={brand}
-            >
-              <FormTextArea
-                value={trashRules}
-                onChange={setTrashRules}
-                placeholder="Matavfall i gröna kärl..."
-                rows={2}
-                brand={brand}
-              />
-            </FieldGroup>
-            <FieldGroup
-              icon={<Info size={14} />}
-              label="Ordningsregler"
-              brand={brand}
-            >
-              <FormTextArea
-                value={campRules}
-                onChange={setCampRules}
-                placeholder="Tystnad efter 23:00..."
-                rows={3}
-                brand={brand}
-              />
-            </FieldGroup>
-          </div>
-          <SaveBtn
-            onClick={handleSave}
-            isPending={isPending}
-            saved={saved}
-            brand={brand}
-          />
-        </div>
+      {s.activeSection === "guest" && (
+        <GuestSection
+          brand={s.brand}
+          wifiName={s.wifiName}
+          setWifiName={s.setWifiName}
+          wifiPassword={s.wifiPassword}
+          setWifiPassword={s.setWifiPassword}
+          checkOutInfo={s.checkOutInfo}
+          setCheckOutInfo={s.setCheckOutInfo}
+          trashRules={s.trashRules}
+          setTrashRules={s.setTrashRules}
+          campRules={s.campRules}
+          setCampRules={s.setCampRules}
+          onSave={s.handleSave}
+          isPending={s.isPending}
+          saved={s.saved}
+        />
       )}
 
       {/* ━━━ ANNOUNCEMENTS ━━━ */}
-      {activeSection === "announcements" && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <SectionLabel label="Anslagstavlan" />
-            {!showNewForm && (
-              <button
-                onClick={() => {
-                  setEditingId(null);
-                  setShowNewForm(true);
-                }}
-                className="flex items-center gap-1.5 rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.1em] text-white transition-all active:scale-95"
-                style={{ backgroundColor: brand }}
-              >
-                <Plus size={13} strokeWidth={2.5} /> Nytt anslag
-              </button>
-            )}
-          </div>
-
-          {showNewForm && (
-            <div className="space-y-3 rounded-[16px] p-4 bg-stone-50">
-              <div className="flex items-center justify-between">
-                <p className="text-[12px] font-black">Skapa anslag</p>
-                <button
-                  onClick={() => setShowNewForm(false)}
-                  className="text-stone-400"
-                >
-                  <X size={12} />
-                </button>
-              </div>
-              <div className="flex gap-1.5">
-                {ANNOUNCEMENT_TYPES.map((at) => (
-                  <button
-                    key={at.value}
-                    onClick={() => setNewType(at.value)}
-                    className="px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider transition-all"
-                    style={
-                      newType === at.value
-                        ? {
-                            backgroundColor: hexToRgba(brand, 0.1),
-                            color: brand,
-                          }
-                        : { backgroundColor: "white", color: "#a8a29e" }
-                    }
-                  >
-                    {at.emoji} {at.label}
-                  </button>
-                ))}
-              </div>
-              <FormInput
-                value={newTitle}
-                onChange={setNewTitle}
-                placeholder="Rubrik..."
-                brand={brand}
-              />
-              <FormTextArea
-                value={newContent}
-                onChange={setNewContent}
-                placeholder="Meddelande..."
-                brand={brand}
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={handleCreateAnnouncement}
-                  className="px-5 py-2.5 rounded-full text-[10px] font-black uppercase text-white"
-                  style={{ backgroundColor: brand }}
-                >
-                  Publicera
-                </button>
-                <button
-                  onClick={() => setShowNewForm(false)}
-                  className="text-[10px] font-black text-stone-400"
-                >
-                  Avbryt
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* List existing announcements */}
-          {announcements.map((ann) => (
-            <div
-              key={ann.id}
-              className="flex items-center justify-between bg-white p-3 rounded-xl border border-stone-100"
-            >
-              <div>
-                <p className="text-[12px] font-bold text-stone-800">
-                  {ann.title}
-                </p>
-                <p className="text-[10px] text-stone-400 truncate max-w-[200px]">
-                  {ann.content}
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleStartEdit(ann)}
-                  className="text-stone-300 hover:text-stone-600 transition-colors"
-                >
-                  <Pencil size={12} />
-                </button>
-                <button
-                  onClick={() => handleDeleteAnnouncement(ann.id)}
-                  className="text-stone-300 hover:text-red-500 transition-colors"
-                >
-                  <Trash2 size={12} />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+      {s.activeSection === "announcements" && (
+        <AnnouncementsSection
+          brand={s.brand}
+          announcements={announcements}
+          showNewForm={s.showNewForm}
+          newTitle={s.newTitle}
+          setNewTitle={s.setNewTitle}
+          newContent={s.newContent}
+          setNewContent={s.setNewContent}
+          newType={s.newType}
+          setNewType={s.setNewType}
+          onOpenNewForm={s.openNewAnnouncementForm}
+          onCloseNewForm={s.closeNewAnnouncementForm}
+          onCreate={s.handleCreateAnnouncement}
+          onStartEdit={s.handleStartEdit}
+          onDelete={s.handleDeleteAnnouncement}
+        />
       )}
     </div>
   );
 }
 
-/* ── Sub-Components ──────────────────────────────────── */
+/* ══════════════════════════════════════════════════════
+   Section Components
+   ══════════════════════════════════════════════════════ */
+
+/* ── Branding Section ──────────────────────────────── */
+function BrandingSection({
+  brand,
+  primaryColor,
+  setPrimaryColor,
+  heroImage,
+  setHeroImage,
+  logoImage,
+  setLogoImage,
+  heroImagePosition,
+  setHeroImagePosition,
+  onSave,
+  isPending,
+  saved,
+}: {
+  brand: string;
+  primaryColor: string;
+  setPrimaryColor: (v: string) => void;
+  heroImage: string;
+  setHeroImage: (v: string) => void;
+  logoImage: string;
+  setLogoImage: (v: string) => void;
+  heroImagePosition: string;
+  setHeroImagePosition: (v: string) => void;
+  onSave: () => void;
+  isPending: boolean;
+  saved: boolean;
+}) {
+  return (
+    <div className="space-y-5">
+      {/* Signature Color */}
+      <div>
+        <SectionLabel label="Signaturfärg" />
+        <p className="mb-4 px-1 text-[11px] text-stone-400">
+          Välj en färg som representerar er camping. Den används i gästvyn för
+          knappar, ikoner och accenter.
+        </p>
+        <div className="mb-4 flex flex-wrap gap-1.5">
+          {COLOR_PRESETS.map((p) => (
+            <button
+              key={p.color}
+              onClick={() => setPrimaryColor(p.color)}
+              className="flex items-center gap-1.5 rounded-full px-3 py-2 transition-all active:scale-95"
+              style={{
+                backgroundColor:
+                  primaryColor === p.color
+                    ? hexToRgba(p.color, 0.08)
+                    : "transparent",
+                boxShadow:
+                  primaryColor === p.color
+                    ? `0 0 0 1.5px ${p.color}`
+                    : "inset 0 0 0 1px rgba(0,0,0,0.06)",
+              }}
+            >
+              <div
+                className="h-4 w-4 rounded-full"
+                style={{ backgroundColor: p.color }}
+              />
+              <span className="text-[10px] font-black uppercase tracking-[0.15em] text-stone-500">
+                {p.label}
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className="mb-4 flex items-center gap-3 rounded-[14px] bg-stone-50/80 p-3">
+          <input
+            type="color"
+            value={primaryColor}
+            onChange={(e) => setPrimaryColor(e.target.value)}
+            className="h-10 w-12 cursor-pointer rounded-[10px] border-0 bg-transparent p-0.5"
+          />
+          <input
+            type="text"
+            value={primaryColor}
+            onChange={(e) => setPrimaryColor(e.target.value)}
+            className="w-24 rounded-[10px] bg-white px-3 py-2 font-mono text-[12px] font-black text-stone-700 ring-1 ring-stone-200/60 focus:outline-none focus:ring-2"
+            style={{ "--tw-ring-color": hexToRgba(primaryColor, 0.3) } as any}
+          />
+          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-300">
+            Egen hex
+          </span>
+        </div>
+      </div>
+
+      {/* Hero Image with Safe Zone Preview */}
+      <div className="border-t border-stone-100 pt-2">
+        <SectionLabel label="Bilder & Design" />
+        <div className="space-y-3">
+          <FieldGroup
+            icon={<ImageIcon size={14} />}
+            label="Hero Image (Bakgrund)"
+            brand={brand}
+          >
+            <FormInput
+              value={heroImage}
+              onChange={setHeroImage}
+              placeholder="https://exempel.se/bild.jpg"
+              brand={brand}
+            />
+
+            {heroImage && (
+              <div className="mt-4 space-y-4">
+                <HeroPreview
+                  heroImage={heroImage}
+                  heroImagePosition={heroImagePosition}
+                />
+                <FocalPointPicker
+                  heroImagePosition={heroImagePosition}
+                  setHeroImagePosition={setHeroImagePosition}
+                  brand={brand}
+                />
+              </div>
+            )}
+          </FieldGroup>
+
+          <FieldGroup
+            icon={<ImageIcon size={14} />}
+            label="Logotyp"
+            brand={brand}
+          >
+            <FormInput
+              value={logoImage}
+              onChange={setLogoImage}
+              placeholder="https://exempel.se/logga.png"
+              brand={brand}
+            />
+          </FieldGroup>
+        </div>
+      </div>
+
+      <SaveBtn
+        onClick={onSave}
+        isPending={isPending}
+        saved={saved}
+        brand={primaryColor}
+      />
+    </div>
+  );
+}
+
+/* ── Hero Preview ──────────────────────────────────── */
+function HeroPreview({
+  heroImage,
+  heroImagePosition,
+}: {
+  heroImage: string;
+  heroImagePosition: string;
+}) {
+  return (
+    <div className="relative h-44 w-full overflow-hidden rounded-[16px] ring-1 ring-stone-200 bg-stone-100 group">
+      <img
+        src={heroImage}
+        alt="Hero preview"
+        className="h-full w-full object-cover transition-all duration-500 ease-in-out"
+        style={{ objectPosition: heroImagePosition }}
+      />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
+      <div className="absolute inset-x-0 bottom-0 p-4 pointer-events-none">
+        <div className="h-2 w-24 bg-white/30 rounded-full mb-1.5 animate-pulse" />
+        <div className="h-5 w-48 bg-white/40 rounded-lg" />
+        <div className="mt-3 flex gap-2">
+          <div className="h-6 w-16 bg-white/10 rounded-full border border-white/10" />
+          <div className="h-6 w-16 bg-white/10 rounded-full border border-white/10" />
+        </div>
+      </div>
+      <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-stone-900/90 text-[7px] font-black uppercase tracking-wider text-white backdrop-blur-sm">
+        <Target size={8} className="text-red-400" />
+        Textområde
+      </div>
+    </div>
+  );
+}
+
+/* ── Focal Point Picker ────────────────────────────── */
+function FocalPointPicker({
+  heroImagePosition,
+  setHeroImagePosition,
+  brand,
+}: {
+  heroImagePosition: string;
+  setHeroImagePosition: (v: string) => void;
+  brand: string;
+}) {
+  return (
+    <div className="flex items-start gap-4">
+      <div className="grid grid-cols-3 gap-1.5 rounded-xl bg-stone-100 p-2 ring-1 ring-stone-200/50">
+        {FOCAL_POSITIONS.map((pos) => (
+          <button
+            key={pos}
+            type="button"
+            onClick={() => setHeroImagePosition(pos)}
+            className={`group relative h-8 w-8 rounded-lg transition-all ${
+              heroImagePosition === pos
+                ? "bg-white shadow-md scale-110"
+                : "hover:bg-white/50"
+            }`}
+          >
+            <div
+              className={`absolute inset-0 m-auto h-1.5 w-1.5 rounded-full transition-all ${
+                heroImagePosition === pos
+                  ? ""
+                  : "bg-stone-300 group-hover:bg-stone-400"
+              }`}
+              style={{
+                backgroundColor: heroImagePosition === pos ? brand : undefined,
+              }}
+            />
+          </button>
+        ))}
+      </div>
+      <div className="flex-1 pt-1">
+        <p className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">
+          Bildfokus
+        </p>
+        <p className="text-[9px] text-stone-400 leading-relaxed mt-1">
+          Använd rutnätet för att flytta bilden. <br />
+          Om någons ansikte täcks av texten, välj <b>&quot;top&quot;</b> för att
+          flytta upp fokus.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ── Contact Section ───────────────────────────────── */
+function ContactSection({
+  brand,
+  phone,
+  setPhone,
+  email,
+  setEmail,
+  address,
+  setAddress,
+  receptionHours,
+  setReceptionHours,
+  onSave,
+  isPending,
+  saved,
+}: {
+  brand: string;
+  phone: string;
+  setPhone: (v: string) => void;
+  email: string;
+  setEmail: (v: string) => void;
+  address: string;
+  setAddress: (v: string) => void;
+  receptionHours: string;
+  setReceptionHours: (v: string) => void;
+  onSave: () => void;
+  isPending: boolean;
+  saved: boolean;
+}) {
+  return (
+    <div className="space-y-5">
+      <SectionLabel label="Kontakt & Reception" />
+      <div className="space-y-3">
+        <FieldGroup
+          icon={<Phone size={14} />}
+          label="Telefonnummer"
+          brand={brand}
+        >
+          <FormInput
+            value={phone}
+            onChange={setPhone}
+            placeholder="0123-456 78"
+            brand={brand}
+          />
+        </FieldGroup>
+        <FieldGroup icon={<Globe size={14} />} label="E-post" brand={brand}>
+          <FormInput
+            value={email}
+            onChange={setEmail}
+            placeholder="info@camping.se"
+            brand={brand}
+          />
+        </FieldGroup>
+        <FieldGroup icon={<MapPin size={14} />} label="Adress" brand={brand}>
+          <FormInput
+            value={address}
+            onChange={setAddress}
+            placeholder="Strandvägen 1..."
+            brand={brand}
+          />
+        </FieldGroup>
+        <FieldGroup icon={<Clock size={14} />} label="Öppettider" brand={brand}>
+          <FormTextArea
+            value={receptionHours}
+            onChange={setReceptionHours}
+            placeholder="Måndag-Fredag: 08:00-20:00"
+            rows={3}
+            brand={brand}
+          />
+        </FieldGroup>
+      </div>
+      <SaveBtn
+        onClick={onSave}
+        isPending={isPending}
+        saved={saved}
+        brand={brand}
+      />
+    </div>
+  );
+}
+
+/* ── Guest Section ─────────────────────────────────── */
+function GuestSection({
+  brand,
+  wifiName,
+  setWifiName,
+  wifiPassword,
+  setWifiPassword,
+  checkOutInfo,
+  setCheckOutInfo,
+  trashRules,
+  setTrashRules,
+  campRules,
+  setCampRules,
+  onSave,
+  isPending,
+  saved,
+}: {
+  brand: string;
+  wifiName: string;
+  setWifiName: (v: string) => void;
+  wifiPassword: string;
+  setWifiPassword: (v: string) => void;
+  checkOutInfo: string;
+  setCheckOutInfo: (v: string) => void;
+  trashRules: string;
+  setTrashRules: (v: string) => void;
+  campRules: string;
+  setCampRules: (v: string) => void;
+  onSave: () => void;
+  isPending: boolean;
+  saved: boolean;
+}) {
+  return (
+    <div className="space-y-5">
+      <SectionLabel label="Gästinformation" />
+      <div className="space-y-3">
+        <FieldGroup icon={<Wifi size={14} />} label="Wi-Fi" brand={brand}>
+          <div className="grid grid-cols-2 gap-2">
+            <FormInput
+              label="Nätverk"
+              value={wifiName}
+              onChange={setWifiName}
+              placeholder="CampingGuest"
+              brand={brand}
+            />
+            <FormInput
+              label="Lösenord"
+              value={wifiPassword}
+              onChange={setWifiPassword}
+              placeholder="sommar2025"
+              brand={brand}
+            />
+          </div>
+        </FieldGroup>
+        <FieldGroup
+          icon={<Clock size={14} />}
+          label="Utcheckning"
+          brand={brand}
+        >
+          <FormTextArea
+            value={checkOutInfo}
+            onChange={setCheckOutInfo}
+            placeholder="Utcheckning senast kl 12:00..."
+            rows={2}
+            brand={brand}
+          />
+        </FieldGroup>
+        <FieldGroup
+          icon={<Trash2 size={14} />}
+          label="Sopsortering"
+          brand={brand}
+        >
+          <FormTextArea
+            value={trashRules}
+            onChange={setTrashRules}
+            placeholder="Matavfall i gröna kärl..."
+            rows={2}
+            brand={brand}
+          />
+        </FieldGroup>
+        <FieldGroup
+          icon={<Info size={14} />}
+          label="Ordningsregler"
+          brand={brand}
+        >
+          <FormTextArea
+            value={campRules}
+            onChange={setCampRules}
+            placeholder="Tystnad efter 23:00..."
+            rows={3}
+            brand={brand}
+          />
+        </FieldGroup>
+      </div>
+      <SaveBtn
+        onClick={onSave}
+        isPending={isPending}
+        saved={saved}
+        brand={brand}
+      />
+    </div>
+  );
+}
+
+/* ── Announcements Section ─────────────────────────── */
+function AnnouncementsSection({
+  brand,
+  announcements,
+  showNewForm,
+  newTitle,
+  setNewTitle,
+  newContent,
+  setNewContent,
+  newType,
+  setNewType,
+  onOpenNewForm,
+  onCloseNewForm,
+  onCreate,
+  onStartEdit,
+  onDelete,
+}: {
+  brand: string;
+  announcements: Announcement[];
+  showNewForm: boolean;
+  newTitle: string;
+  setNewTitle: (v: string) => void;
+  newContent: string;
+  setNewContent: (v: string) => void;
+  newType: "info" | "event" | "warning";
+  setNewType: (v: "info" | "event" | "warning") => void;
+  onOpenNewForm: () => void;
+  onCloseNewForm: () => void;
+  onCreate: () => void;
+  onStartEdit: (ann: Announcement) => void;
+  onDelete: (id: string) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <SectionLabel label="Anslagstavlan" />
+        {!showNewForm && (
+          <button
+            onClick={onOpenNewForm}
+            className="flex items-center gap-1.5 rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.1em] text-white transition-all active:scale-95"
+            style={{ backgroundColor: brand }}
+          >
+            <Plus size={13} strokeWidth={2.5} /> Nytt anslag
+          </button>
+        )}
+      </div>
+
+      {showNewForm && (
+        <div className="space-y-3 rounded-[16px] p-4 bg-stone-50">
+          <div className="flex items-center justify-between">
+            <p className="text-[12px] font-black">Skapa anslag</p>
+            <button onClick={onCloseNewForm} className="text-stone-400">
+              <X size={12} />
+            </button>
+          </div>
+          <div className="flex gap-1.5">
+            {ANNOUNCEMENT_TYPES.map((at) => (
+              <button
+                key={at.value}
+                onClick={() => setNewType(at.value)}
+                className="px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider transition-all"
+                style={
+                  newType === at.value
+                    ? {
+                        backgroundColor: hexToRgba(brand, 0.1),
+                        color: brand,
+                      }
+                    : { backgroundColor: "white", color: "#a8a29e" }
+                }
+              >
+                {at.emoji} {at.label}
+              </button>
+            ))}
+          </div>
+          <FormInput
+            value={newTitle}
+            onChange={setNewTitle}
+            placeholder="Rubrik..."
+            brand={brand}
+          />
+          <FormTextArea
+            value={newContent}
+            onChange={setNewContent}
+            placeholder="Meddelande..."
+            brand={brand}
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={onCreate}
+              className="px-5 py-2.5 rounded-full text-[10px] font-black uppercase text-white"
+              style={{ backgroundColor: brand }}
+            >
+              Publicera
+            </button>
+            <button
+              onClick={onCloseNewForm}
+              className="text-[10px] font-black text-stone-400"
+            >
+              Avbryt
+            </button>
+          </div>
+        </div>
+      )}
+
+      {announcements.map((ann) => (
+        <div
+          key={ann.id}
+          className="flex items-center justify-between bg-white p-3 rounded-xl border border-stone-100"
+        >
+          <div>
+            <p className="text-[12px] font-bold text-stone-800">{ann.title}</p>
+            <p className="text-[10px] text-stone-400 truncate max-w-[200px]">
+              {ann.content}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => onStartEdit(ann)}
+              className="text-stone-300 hover:text-stone-600 transition-colors"
+            >
+              <Pencil size={12} />
+            </button>
+            <button
+              onClick={() => onDelete(ann.id)}
+              className="text-stone-300 hover:text-red-500 transition-colors"
+            >
+              <Trash2 size={12} />
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════
+   Shared Primitives
+   ══════════════════════════════════════════════════════ */
+
 function SectionLabel({ label }: { label: string }) {
   return (
     <h3 className="text-[13px] font-black tracking-tight text-stone-900 mb-1 px-1">

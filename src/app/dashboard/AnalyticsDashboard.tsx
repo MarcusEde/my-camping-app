@@ -1,7 +1,6 @@
-// app/dashboard/AnalyticsDashboard.tsx
 "use client";
 
-import { getAnalyticsStats } from "@/lib/analytics";
+import { useAnalyticsDashboard } from "@/lib/hooks/useAnalyticsDashboard";
 import type { AnalyticsStats } from "@/types/database";
 import {
   Brain,
@@ -13,8 +12,9 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import React from "react";
 
+/* ── Constants (UI-only) ─────────────────────────────── */
 const TAB_LABELS: Record<string, string> = {
   puls: "Hem",
   planerare: "Planerare",
@@ -24,24 +24,19 @@ const TAB_LABELS: Record<string, string> = {
 };
 
 const RATING_EMOJI = ["", "😞", "😐", "🙂", "😊", "🤩"];
+const PERIODS = [7, 30, 90] as const;
 
+/* ── Props ───────────────────────────────────────────── */
 interface Props {
   campgroundId: string;
   brand: string;
 }
 
+/* ── Main Component ──────────────────────────────────── */
 export default function AnalyticsDashboard({ campgroundId, brand }: Props) {
-  const [stats, setStats] = useState<AnalyticsStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [period, setPeriod] = useState<7 | 30 | 90>(7);
-
-  useEffect(() => {
-    setLoading(true);
-    getAnalyticsStats(campgroundId, period)
-      .then(setStats)
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [campgroundId, period]);
+  const { stats, loading, period, setPeriod } = useAnalyticsDashboard({
+    campgroundId,
+  });
 
   if (loading) {
     return (
@@ -66,7 +61,7 @@ export default function AnalyticsDashboard({ campgroundId, brand }: Props) {
           📊 Gästanalys
         </h2>
         <div className="flex gap-1 rounded-full bg-stone-100 p-0.5">
-          {([7, 30, 90] as const).map((d) => (
+          {PERIODS.map((d) => (
             <button
               key={d}
               onClick={() => setPeriod(d)}
@@ -120,144 +115,188 @@ export default function AnalyticsDashboard({ campgroundId, brand }: Props) {
 
       {/* Charts Row */}
       <div className="grid gap-3 lg:grid-cols-2">
-        {/* Daily Views */}
-        <div className="rounded-[16px] bg-white p-4 ring-1 ring-stone-200/60">
-          <p className="mb-3 text-[10px] font-black uppercase tracking-[0.2em] text-stone-300">
-            Dagliga besök
-          </p>
-          {stats.dailyViews.length > 0 ? (
-            <div className="flex items-end gap-[2px]" style={{ height: 80 }}>
-              {stats.dailyViews.slice(-period).map((day) => {
-                const max = Math.max(
-                  ...stats.dailyViews.map((d) => d.views),
-                  1,
-                );
-                const h = Math.max((day.views / max) * 100, 4);
-                return (
-                  <div
-                    key={day.date}
-                    className="group relative flex-1"
-                    title={`${day.date}: ${day.views} (${day.unique} unika)`}
-                  >
-                    <div
-                      className="w-full rounded-t-sm transition-colors group-hover:opacity-80"
-                      style={{ height: `${h}%`, backgroundColor: brand }}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="py-6 text-center text-[11px] text-stone-400">
-              Ingen data ännu — besök registreras automatiskt
-            </p>
-          )}
-        </div>
-
-        {/* Top Tabs */}
-        <div className="rounded-[16px] bg-white p-4 ring-1 ring-stone-200/60">
-          <p className="mb-3 text-[10px] font-black uppercase tracking-[0.2em] text-stone-300">
-            Populäraste sektioner
-          </p>
-          <div className="space-y-2">
-            {stats.topTabs.slice(0, 5).map((tab) => {
-              const pct = Math.round(
-                (tab.count / (stats.topTabs[0]?.count ?? 1)) * 100,
-              );
-              return (
-                <div key={tab.tab} className="space-y-1">
-                  <div className="flex justify-between text-[11px]">
-                    <span className="font-bold text-stone-600">
-                      {TAB_LABELS[tab.tab] ?? tab.tab}
-                    </span>
-                    <span className="font-black text-stone-400">
-                      {tab.count}
-                    </span>
-                  </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-stone-100">
-                    <div
-                      className="h-full rounded-full"
-                      style={{ width: `${pct}%`, backgroundColor: brand }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <DailyViewsChart
+          dailyViews={stats.dailyViews}
+          period={period}
+          brand={brand}
+        />
+        <TopTabsChart topTabs={stats.topTabs} brand={brand} />
       </div>
 
       {/* Bottom Row */}
       <div className="grid gap-3 lg:grid-cols-2">
-        {/* Top Directions */}
-        <div className="rounded-[16px] bg-white p-4 ring-1 ring-stone-200/60">
-          <div className="mb-3 flex items-center gap-1.5">
-            <Navigation size={11} className="text-stone-400" />
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-300">
-              Mest klickade &quot;Visa vägen&quot;
-            </p>
-          </div>
-          {stats.topPlaces.length > 0 ? (
-            <div className="space-y-1.5">
-              {stats.topPlaces.slice(0, 5).map((p, i) => (
-                <div
-                  key={p.placeId}
-                  className="flex items-center justify-between rounded-[10px] bg-stone-50 px-3 py-2"
-                >
-                  <span className="text-[11px] font-bold text-stone-600">
-                    <span className="mr-2 text-stone-300">{i + 1}.</span>
-                    {p.placeName}
-                  </span>
-                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-black text-emerald-600">
-                    {p.clicks}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="py-4 text-center text-[11px] text-stone-400">
-              Inga klick ännu
-            </p>
-          )}
-        </div>
-
-        {/* Recent Feedback */}
-        <div className="rounded-[16px] bg-white p-4 ring-1 ring-stone-200/60">
-          <div className="mb-3 flex items-center gap-1.5">
-            <MessageSquare size={11} className="text-stone-400" />
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-300">
-              Senaste omdömen
-            </p>
-          </div>
-          {stats.recentFeedback.length > 0 ? (
-            <div className="space-y-1.5">
-              {stats.recentFeedback.slice(0, 5).map((fb, i) => (
-                <div key={i} className="rounded-[10px] bg-stone-50 px-3 py-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-base">{RATING_EMOJI[fb.rating]}</span>
-                    <span className="text-[9px] text-stone-300">
-                      {new Date(fb.created_at).toLocaleDateString("sv-SE")}
-                    </span>
-                  </div>
-                  {fb.comment && (
-                    <p className="mt-1 text-[11px] italic text-stone-500">
-                      &ldquo;{fb.comment}&rdquo;
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="py-4 text-center text-[11px] text-stone-400">
-              Inga omdömen ännu
-            </p>
-          )}
-        </div>
+        <TopDirectionsPanel topPlaces={stats.topPlaces} />
+        <RecentFeedbackPanel recentFeedback={stats.recentFeedback} />
       </div>
     </div>
   );
 }
 
+/* ═══════════════════════════════════════════════════════
+   Section Components
+   ═══════════════════════════════════════════════════════ */
+
+function DailyViewsChart({
+  dailyViews,
+  period,
+  brand,
+}: {
+  dailyViews: AnalyticsStats["dailyViews"];
+  period: number;
+  brand: string;
+}) {
+  return (
+    <div className="rounded-[16px] bg-white p-4 ring-1 ring-stone-200/60">
+      <p className="mb-3 text-[10px] font-black uppercase tracking-[0.2em] text-stone-300">
+        Dagliga besök
+      </p>
+      {dailyViews.length > 0 ? (
+        <div className="flex items-end gap-[2px]" style={{ height: 80 }}>
+          {dailyViews.slice(-period).map((day) => {
+            const max = Math.max(...dailyViews.map((d) => d.views), 1);
+            const h = Math.max((day.views / max) * 100, 4);
+            return (
+              <div
+                key={day.date}
+                className="group relative flex-1"
+                title={`${day.date}: ${day.views} (${day.unique} unika)`}
+              >
+                <div
+                  className="w-full rounded-t-sm transition-colors group-hover:opacity-80"
+                  style={{ height: `${h}%`, backgroundColor: brand }}
+                />
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="py-6 text-center text-[11px] text-stone-400">
+          Ingen data ännu — besök registreras automatiskt
+        </p>
+      )}
+    </div>
+  );
+}
+
+function TopTabsChart({
+  topTabs,
+  brand,
+}: {
+  topTabs: AnalyticsStats["topTabs"];
+  brand: string;
+}) {
+  return (
+    <div className="rounded-[16px] bg-white p-4 ring-1 ring-stone-200/60">
+      <p className="mb-3 text-[10px] font-black uppercase tracking-[0.2em] text-stone-300">
+        Populäraste sektioner
+      </p>
+      <div className="space-y-2">
+        {topTabs.slice(0, 5).map((tab) => {
+          const pct = Math.round((tab.count / (topTabs[0]?.count ?? 1)) * 100);
+          return (
+            <div key={tab.tab} className="space-y-1">
+              <div className="flex justify-between text-[11px]">
+                <span className="font-bold text-stone-600">
+                  {TAB_LABELS[tab.tab] ?? tab.tab}
+                </span>
+                <span className="font-black text-stone-400">{tab.count}</span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-stone-100">
+                <div
+                  className="h-full rounded-full"
+                  style={{ width: `${pct}%`, backgroundColor: brand }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function TopDirectionsPanel({
+  topPlaces,
+}: {
+  topPlaces: AnalyticsStats["topPlaces"];
+}) {
+  return (
+    <div className="rounded-[16px] bg-white p-4 ring-1 ring-stone-200/60">
+      <div className="mb-3 flex items-center gap-1.5">
+        <Navigation size={11} className="text-stone-400" />
+        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-300">
+          Mest klickade &quot;Visa vägen&quot;
+        </p>
+      </div>
+      {topPlaces.length > 0 ? (
+        <div className="space-y-1.5">
+          {topPlaces.slice(0, 5).map((p, i) => (
+            <div
+              key={p.placeId}
+              className="flex items-center justify-between rounded-[10px] bg-stone-50 px-3 py-2"
+            >
+              <span className="text-[11px] font-bold text-stone-600">
+                <span className="mr-2 text-stone-300">{i + 1}.</span>
+                {p.placeName}
+              </span>
+              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-black text-emerald-600">
+                {p.clicks}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="py-4 text-center text-[11px] text-stone-400">
+          Inga klick ännu
+        </p>
+      )}
+    </div>
+  );
+}
+
+function RecentFeedbackPanel({
+  recentFeedback,
+}: {
+  recentFeedback: AnalyticsStats["recentFeedback"];
+}) {
+  return (
+    <div className="rounded-[16px] bg-white p-4 ring-1 ring-stone-200/60">
+      <div className="mb-3 flex items-center gap-1.5">
+        <MessageSquare size={11} className="text-stone-400" />
+        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-300">
+          Senaste omdömen
+        </p>
+      </div>
+      {recentFeedback.length > 0 ? (
+        <div className="space-y-1.5">
+          {recentFeedback.slice(0, 5).map((fb, i) => (
+            <div key={i} className="rounded-[10px] bg-stone-50 px-3 py-2">
+              <div className="flex items-center justify-between">
+                <span className="text-base">{RATING_EMOJI[fb.rating]}</span>
+                <span className="text-[9px] text-stone-300">
+                  {new Date(fb.created_at).toLocaleDateString("sv-SE")}
+                </span>
+              </div>
+              {fb.comment && (
+                <p className="mt-1 text-[11px] italic text-stone-500">
+                  &ldquo;{fb.comment}&rdquo;
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="py-4 text-center text-[11px] text-stone-400">
+          Inga omdömen ännu
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+   KPI Card
+   ═══════════════════════════════════════════════════════ */
 function KPI({
   icon,
   label,

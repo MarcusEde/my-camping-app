@@ -1,54 +1,51 @@
-'use client'; // Måste vara client för att kunna chatta/klicka
+// src/components/AiItinerary.tsx
+"use client";
 
-import React, { useState } from 'react';
-// Importera din server action som sköter AI-anropet
-// import { generatePlan } from '@/app/dashboard/actions'; 
+import { useAiItinerary } from "@/lib/hooks/useAiItinerary";
+import { aiItineraryLabels } from "@/lib/translations";
+import type { Campground } from "@/types/database";
+import type { Lang, WeatherProp } from "@/types/guest";
 
-export default function AiItinerary({ campground, weather }: any) {
-  const [plan, setPlan] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+interface Props {
+  campground: Campground;
+  weather: WeatherProp | null;
+  lang: Lang;
+}
 
-  // Själva AI-anropet görs i en vanlig asynkron funktion, INTE i komponent-toppen
-  async function handleGeneratePlan() {
-    setLoading(true);
-    try {
-      // Här anropar du din server action eller API-rutt
-      // const res = await generatePlan(campground.name, weather);
-      // setPlan(res);
-      setPlan("Här är din plan för Åsa Camping..."); 
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }
+export default function AiItinerary({ campground, weather, lang }: Props) {
+  const { plan, loading, generate } = useAiItinerary(campground.name);
+  const l = aiItineraryLabels[lang];
 
   return (
-    <div className="bg-white p-6 rounded-3xl shadow-sm border border-purple-100">
-      <h2 className="text-xl font-bold mb-2 flex items-center gap-2">
-        <span className="text-purple-500">✨</span> AI Reseplanerare
+    <div className="rounded-3xl border border-purple-100 bg-white p-6 shadow-sm">
+      <h2 className="mb-2 flex items-center gap-2 text-xl font-bold">
+        <span className="text-purple-500">✨</span> {l.title}
       </h2>
-      <p className="text-sm text-gray-500 mb-6">
-        Låt AI skapa en personlig dagsplan baserat på vädret i {campground.name}.
+      <p className="mb-6 text-sm text-gray-500">
+        {l.subtitle(campground.name)}
       </p>
 
       {loading ? (
-        <div className="animate-pulse flex space-y-4 flex-col">
-          <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-          <div className="h-4 bg-gray-200 rounded w-full"></div>
-        </div>
+        <AiItineraryLoadingState />
       ) : plan ? (
-        <div className="prose prose-sm text-gray-700">
-          {plan}
-        </div>
+        <div className="prose prose-sm text-gray-700">{plan}</div>
       ) : (
-        <button 
-          onClick={handleGeneratePlan}
-          className="w-full py-4 bg-purple-600 text-white rounded-2xl font-bold hover:bg-purple-700 transition-colors"
+        <button
+          onClick={generate}
+          className="w-full rounded-2xl bg-purple-600 py-4 font-bold text-white transition-colors hover:bg-purple-700"
         >
-          Skapa min dagsplan
+          {l.button}
         </button>
       )}
+    </div>
+  );
+}
+
+function AiItineraryLoadingState() {
+  return (
+    <div className="flex animate-pulse flex-col space-y-4">
+      <div className="h-4 w-3/4 rounded bg-gray-200" />
+      <div className="h-4 w-full rounded bg-gray-200" />
     </div>
   );
 }

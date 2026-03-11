@@ -10,12 +10,14 @@
 import { getTodaysOpeningHours } from "@/lib/place-utils";
 import type { RoadDistanceMap } from "@/lib/routing";
 import { getSettingsField } from "@/lib/settings-i18n";
+import { hexToRgba } from "@/lib/utils";
 import type {
   Announcement,
   CachedPlace,
   Campground,
   InternalLocation,
 } from "@/types/database";
+import type { Lang, WeatherProp } from "@/types/guest";
 import { motion } from "framer-motion";
 import {
   CalendarHeart,
@@ -35,8 +37,6 @@ import {
   Wifi,
 } from "lucide-react";
 import React, { useEffect, useMemo, useState } from "react";
-import type { Lang, WeatherProp } from "../GuestAppUI";
-import { hexToRgba } from "../GuestAppUI";
 
 /* ── Translation helpers ─────────────────────────────── */
 
