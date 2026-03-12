@@ -27,9 +27,10 @@ export type PlaceCategory =
 export type AnnouncementType = "info" | "event" | "warning";
 export type AnnouncementPriority = "normal" | "high";
 
+export type WeatherCategory = "rain" | "heat" | "cold" | "wind";
+
 // ─── Translation shapes ───────────────────────────────────
 
-/** Per-language translation for an announcement (title + content). */
 export type AnnouncementTranslations = {
   [lang in "en" | "de" | "da" | "nl" | "no"]?: {
     title: string;
@@ -37,12 +38,10 @@ export type AnnouncementTranslations = {
   };
 };
 
-/** Per-language translation for a short owner note (plain string). */
 export type NoteTranslations = {
   [lang in "en" | "de" | "da" | "nl" | "no"]?: string;
 };
 
-/** Per-language translation for a partner (name + description). */
 export type PartnerTranslations = {
   [lang in "en" | "de" | "da" | "nl" | "no"]?: {
     business_name: string;
@@ -50,7 +49,6 @@ export type PartnerTranslations = {
   };
 };
 
-/** Translatable campground settings fields. */
 export type TranslatableSettingsFields =
   | "check_out_info"
   | "trash_rules"
@@ -58,7 +56,6 @@ export type TranslatableSettingsFields =
   | "camp_rules"
   | "reception_hours";
 
-/** Per-language translation for campground info/settings text. */
 export type SettingsTranslations = {
   [lang in "en" | "de" | "da" | "nl" | "no"]?: {
     [field in TranslatableSettingsFields]?: string;
@@ -78,20 +75,17 @@ export type Campground = {
   trial_ends_at: string;
   created_at: string;
 
-  // Branding
   primary_color: string;
   logo_url?: string | null;
   hero_image_url?: string | null;
   hero_image_position?: string | null;
 
-  // Guest info
   wifi_name?: string | null;
   wifi_password?: string | null;
   check_out_info?: string | null;
   trash_rules?: string | null;
   emergency_info?: string | null;
 
-  // Contact & reception
   phone?: string | null;
   email?: string | null;
   website?: string | null;
@@ -99,10 +93,7 @@ export type Campground = {
   reception_hours?: string | null;
   camp_rules?: string | null;
 
-  // Localization
   supported_languages?: string[] | null;
-
-  /** Auto-translated settings fields keyed by language code. */
   settings_translations?: SettingsTranslations | null;
 };
 
@@ -127,9 +118,7 @@ export type CachedPlace = {
   is_pinned: boolean;
   is_hidden: boolean;
   owner_note: string | null;
-  /** Auto-translated owner notes keyed by language code. */
   note_translations: NoteTranslations | null;
-  /** Pre-computed OSRM road distance from the parent campground (km). */
   road_distance_km: number | null;
 };
 
@@ -144,8 +133,8 @@ export type Announcement = {
   priority: AnnouncementPriority;
   created_at: string;
   expires_at?: string | null;
-  /** Auto-translated title & content keyed by language code. */
   translations: AnnouncementTranslations | null;
+  weather_category?: WeatherCategory | null;
 };
 
 // ─── PromotedPartner ──────────────────────────────────────
@@ -164,8 +153,21 @@ export type PromotedPartner = {
   starts_at: string;
   ends_at?: string | null;
   created_at: string;
-  /** Auto-translated name & description keyed by language code. */
   translations: PartnerTranslations | null;
+
+  /** Owner-defined coupon code. When set, guests can "Claim" it. */
+  coupon_code?: string | null;
+};
+
+// ─── Redemption ───────────────────────────────────────────
+
+/** Tracks a guest claiming (revealing) a partner coupon code. */
+export type Redemption = {
+  id: string;
+  campground_id: string;
+  partner_id: string;
+  session_id: string;
+  created_at: string;
 };
 
 // ─── InternalLocation ─────────────────────────────────────
@@ -235,6 +237,10 @@ export interface AnalyticsStats {
   avgRating: number | null;
   feedbackCount: number;
   directionsClicks: number;
+
+  /** Total coupon codes revealed by guests in the period. */
+  totalRedemptions: number;
+
   topTabs: { tab: string; count: number }[];
   topPlaces: { placeId: string; placeName: string; clicks: number }[];
   dailyViews: { date: string; views: number; unique: number }[];
@@ -243,8 +249,13 @@ export interface AnalyticsStats {
     comment: string | null;
     created_at: string;
   }[];
-  weekOverWeek: { viewsChange: number; guestsChange: number };
+  weekOverWeek: {
+    viewsChange: number;
+    guestsChange: number;
+    redemptionsChange: number;
+  };
 }
+
 // ─── Database Schema ──────────────────────────────────────
 
 export type Database = {
@@ -296,6 +307,12 @@ export type Database = {
         Row: DirectionsClick;
         Insert: Omit<DirectionsClick, "id" | "created_at">;
         Update: Partial<Omit<DirectionsClick, "id" | "created_at">>;
+        Relationships: [];
+      };
+      redemptions: {
+        Row: Redemption;
+        Insert: Omit<Redemption, "id" | "created_at">;
+        Update: Partial<Omit<Redemption, "id" | "created_at">>;
         Relationships: [];
       };
     };

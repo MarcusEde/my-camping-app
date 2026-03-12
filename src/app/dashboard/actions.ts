@@ -71,6 +71,7 @@ const PartnerSchema = z.object({
     (val) => (val === "" ? null : val),
     z.string().datetime().nullable().optional(),
   ),
+  coupon_code: z.string().max(50).nullable().optional(), // ← ADD THIS
 });
 
 /**
@@ -577,6 +578,7 @@ export async function createPromotedPartner(
     is_active: true,
     starts_at: data.starts_at || new Date().toISOString(),
     ends_at: data.ends_at || null,
+    coupon_code: data.coupon_code?.trim() || null, // ← ADD THIS
   };
   if (translations) {
     insertPayload.translations = translations;
@@ -621,6 +623,11 @@ export async function updatePromotedPartner(
     ...data,
     business_name: data.business_name?.trim(),
   };
+
+  // Ensure coupon_code is trimmed and null-coalesced
+  if (data.coupon_code !== undefined) {
+    updatePayload.coupon_code = data.coupon_code?.trim() || null;
+  }
 
   if (nameChanged || descChanged) {
     const newTranslations = await safeTranslatePartner(

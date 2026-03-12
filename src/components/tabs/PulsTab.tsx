@@ -5,6 +5,11 @@
  * PulsTab.tsx — High-Density Scannable Layout
  * With automatic translation display for announcements,
  * owner notes, AND campground info fields.
+ *
+ * Features:
+ * - "My Stay" saved items section at the top
+ * - Smart Announcements: weather-aware sorting promotes
+ *   contextually relevant notices based on current conditions.
  */
 
 import { getTodaysOpeningHours } from "@/lib/place-utils";
@@ -18,23 +23,29 @@ import type {
   InternalLocation,
 } from "@/types/database";
 import type { Lang, WeatherProp } from "@/types/guest";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   CalendarHeart,
   Check,
   ChevronRight,
   Clock,
+  CloudRain,
   Compass,
   Copy,
   ExternalLink,
+  Flame,
   Globe,
+  Heart,
   MapPin,
   Megaphone,
   Phone,
+  Snowflake,
   Sun,
+  Thermometer,
   Trash2,
   Umbrella,
   Wifi,
+  Wind,
 } from "lucide-react";
 import React, { useEffect, useMemo, useState } from "react";
 
@@ -52,6 +63,26 @@ function getAnnouncementText(
   };
 }
 
+/**
+ * Collect ALL text representations of an announcement across
+ * every available language. This ensures keyword matching works
+ * regardless of which language the campground owner wrote in.
+ */
+function getAllAnnouncementText(ann: Announcement): string {
+  const parts: string[] = [ann.title, ann.content];
+
+  if (ann.translations) {
+    for (const tr of Object.values(ann.translations)) {
+      if (tr) {
+        if (tr.title) parts.push(tr.title);
+        if (tr.content) parts.push(tr.content);
+      }
+    }
+  }
+
+  return parts.join(" ").toLowerCase();
+}
+
 function getOwnerNote(place: CachedPlace, lang: Lang): string | null {
   if (!place.owner_note) return null;
   if (lang === "sv") return place.owner_note;
@@ -59,6 +90,249 @@ function getOwnerNote(place: CachedPlace, lang: Lang): string | null {
     place.note_translations?.[lang as "en" | "de" | "da"] || place.owner_note
   );
 }
+
+/* ── Weather keyword matching ────────────────────────── */
+
+/**
+ * Multilingual keyword pools for weather-based announcement promotion.
+ */
+const RAIN_KEYWORDS = [
+  "regn",
+  "regnig",
+  "inomhus",
+  "mys",
+  "mysig",
+  "inne",
+  "inneaktivitet",
+  "tak",
+  "under tak",
+  "rain",
+  "rainy",
+  "indoor",
+  "indoors",
+  "inside",
+  "cozy",
+  "shelter",
+  "covered",
+  "wet weather",
+  "regen",
+  "drinnen",
+  "innen",
+  "gemütlich",
+  "überdacht",
+  "regenwetter",
+  "regn",
+  "indendørs",
+  "inde",
+  "hygge",
+  "hyggelig",
+  "regen",
+  "binnen",
+  "gezellig",
+  "overdekt",
+  "regn",
+  "innendørs",
+  "inne",
+  "koselig",
+];
+
+const HEAT_KEYWORDS = [
+  "bad",
+  "bada",
+  "strand",
+  "glass",
+  "sol",
+  "solskydd",
+  "vatten",
+  "simma",
+  "sval",
+  "svalkande",
+  "pool",
+  "swim",
+  "swimming",
+  "beach",
+  "ice cream",
+  "sun",
+  "sunscreen",
+  "cool",
+  "cooling",
+  "water",
+  "pool",
+  "shade",
+  "baden",
+  "strand",
+  "eis",
+  "sonne",
+  "sonnenschutz",
+  "schwimmen",
+  "abkühlung",
+  "wasser",
+  "bad",
+  "bade",
+  "strand",
+  "is",
+  "sol",
+  "svømme",
+  "pool",
+  "zwemmen",
+  "strand",
+  "ijs",
+  "zon",
+  "water",
+  "zwembad",
+  "verkoeling",
+  "bad",
+  "bade",
+  "strand",
+  "is",
+  "sol",
+  "svømme",
+  "basseng",
+];
+
+const COLD_KEYWORDS = [
+  "kallt",
+  "varmt",
+  "värme",
+  "varm",
+  "bastu",
+  "sauna",
+  "inne",
+  "inomhus",
+  "fika",
+  "cold",
+  "warm",
+  "warmth",
+  "heating",
+  "sauna",
+  "hot chocolate",
+  "fireplace",
+  "fire",
+  "kalt",
+  "warm",
+  "wärme",
+  "sauna",
+  "heiss",
+  "kamin",
+  "feuer",
+  "koldt",
+  "varm",
+  "varme",
+  "sauna",
+  "ild",
+  "pejs",
+  "koud",
+  "warm",
+  "warmte",
+  "sauna",
+  "vuur",
+  "haard",
+  "kaldt",
+  "varmt",
+  "varme",
+  "sauna",
+  "bål",
+  "peis",
+];
+
+const WIND_KEYWORDS = [
+  "vind",
+  "blåsigt",
+  "lä",
+  "vindskydd",
+  "skyddat",
+  "wind",
+  "windy",
+  "sheltered",
+  "windbreak",
+  "gust",
+  "wind",
+  "windig",
+  "windschutz",
+  "geschützt",
+  "vind",
+  "blæsende",
+  "læ",
+  "vindskærm",
+  "wind",
+  "winderig",
+  "beschut",
+  "windscherm",
+  "vind",
+  "vindfullt",
+  "le",
+  "vindskjerm",
+];
+
+type WeatherCondition = "rain" | "heat" | "cold" | "wind" | null;
+
+function getActiveWeatherConditions(
+  weather: WeatherProp | null | undefined,
+): WeatherCondition[] {
+  if (!weather) return [];
+
+  const conditions: WeatherCondition[] = [];
+
+  if (weather.isRaining) conditions.push("rain");
+  if (weather.temp > 25) conditions.push("heat");
+  if (weather.temp < 10) conditions.push("cold");
+  if (weather.windSpeed >= 10) conditions.push("wind");
+
+  return conditions;
+}
+
+function getWeatherRelevanceScore(
+  ann: Announcement,
+  activeConditions: WeatherCondition[],
+): { score: number; matchedCondition: WeatherCondition } {
+  if (activeConditions.length === 0) {
+    return { score: 0, matchedCondition: null };
+  }
+
+  // Check for explicit weather_category field (future-proof)
+  if ((ann as any).weather_category) {
+    if (activeConditions.includes((ann as any).weather_category)) {
+      return { score: 2, matchedCondition: (ann as any).weather_category };
+    }
+    return { score: 0, matchedCondition: null };
+  }
+
+  // Keyword-based matching (fallback)
+  const allText = getAllAnnouncementText(ann);
+
+  const keywordMap: Record<string, string[]> = {
+    rain: RAIN_KEYWORDS,
+    heat: HEAT_KEYWORDS,
+    cold: COLD_KEYWORDS,
+    wind: WIND_KEYWORDS,
+  };
+
+  for (const condition of activeConditions) {
+    if (!condition) continue;
+    const keywords = keywordMap[condition];
+    if (!keywords) continue;
+
+    const hasMatch = keywords.some((kw) => {
+      if (kw.length <= 3) {
+        const regex = new RegExp(`\\b${kw}\\b`, "i");
+        return regex.test(allText);
+      }
+      return allText.includes(kw);
+    });
+
+    if (hasMatch) {
+      return { score: 1, matchedCondition: condition };
+    }
+  }
+
+  return { score: 0, matchedCondition: null };
+}
+
+type ScoredAnnouncement = {
+  announcement: Announcement;
+  weatherScore: number;
+  matchedCondition: WeatherCondition;
+};
 
 /* ── Physics ─────────────────────────────────────────── */
 const SPRING_TAP = { type: "spring" as const, stiffness: 440, damping: 24 };
@@ -157,6 +431,9 @@ const t: Record<
     closed: string;
     onSite: string;
     facilities: string;
+    weatherTip: string;
+    myStay: string;
+    myStaySub: string;
   }
 > = {
   sv: {
@@ -189,6 +466,9 @@ const t: Record<
     closed: "Stängt",
     onSite: "På området",
     facilities: "Faciliteter",
+    weatherTip: "Vädertips",
+    myStay: "Min vistelse",
+    myStaySub: "Dina sparade platser",
   },
   en: {
     wifi: "Wi-Fi",
@@ -220,6 +500,9 @@ const t: Record<
     closed: "Closed",
     onSite: "On site",
     facilities: "Facilities",
+    weatherTip: "Weather tip",
+    myStay: "My Stay",
+    myStaySub: "Your saved places",
   },
   de: {
     wifi: "WLAN",
@@ -251,6 +534,9 @@ const t: Record<
     closed: "Geschlossen",
     onSite: "Auf dem Platz",
     facilities: "Einrichtungen",
+    weatherTip: "Wettertipp",
+    myStay: "Mein Aufenthalt",
+    myStaySub: "Gespeicherte Orte",
   },
   da: {
     wifi: "Wi-Fi",
@@ -282,6 +568,9 @@ const t: Record<
     closed: "Lukket",
     onSite: "På pladsen",
     facilities: "Faciliteter",
+    weatherTip: "Vejrtip",
+    myStay: "Mit ophold",
+    myStaySub: "Dine gemte steder",
   },
   nl: {
     wifi: "Wi-Fi",
@@ -313,6 +602,9 @@ const t: Record<
     closed: "Gesloten",
     onSite: "Op het terrein",
     facilities: "Voorzieningen",
+    weatherTip: "Weertip",
+    myStay: "Mijn verblijf",
+    myStaySub: "Je opgeslagen plekken",
   },
   no: {
     wifi: "Wi-Fi",
@@ -344,6 +636,9 @@ const t: Record<
     closed: "Stengt",
     onSite: "På plassen",
     facilities: "Fasiliteter",
+    weatherTip: "Værtips",
+    myStay: "Mitt opphold",
+    myStaySub: "Dine lagrede steder",
   },
 };
 
@@ -360,6 +655,8 @@ interface Props {
   distanceMap: RoadDistanceMap;
   internalLocations?: InternalLocation[];
   onDirectionsClick?: (placeId: string) => void;
+  savedIds?: string[];
+  removeSaved?: (id: string) => void;
 }
 
 export default function PulsTab({
@@ -371,6 +668,8 @@ export default function PulsTab({
   distanceMap,
   internalLocations = [],
   onDirectionsClick,
+  savedIds = [],
+  removeSaved,
 }: Props) {
   const l = t[lang];
   const brand = campground.primary_color || "#2A3C34";
@@ -379,47 +678,28 @@ export default function PulsTab({
     null,
   );
 
+  // ─── Saved Places (My Stay) ──────────────────────────
+  // AFTER
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const savedPlaces = useMemo(() => {
+    if (!mounted) return [];
+    return savedIds
+      .map((id) => places.find((p) => p.id === id))
+      .filter((p): p is CachedPlace => p != null && !p.is_hidden);
+  }, [mounted, savedIds, places]);
+
   const pinnedPlaces = useMemo(
     () => places.filter((p) => !p.is_hidden && p.is_pinned).slice(0, 8),
     [places],
   );
 
   // ─── Tip of the Day ──────────────────────────────────
-  const [advisedPlace, setAdvisedPlace] = useState<CachedPlace | null>(() => {
-    if (pinnedPlaces.length === 0) return null;
-
-    const isCold = weather ? weather.temp < 15 : false;
-    let pool: CachedPlace[] = []; // Start with an empty pool
-
-    if (weather?.isRaining || isCold) {
-      // Filter for places that are explicitly marked indoor OR are in indoor categories
-      pool = pinnedPlaces.filter(
-        (p) =>
-          p.is_indoor ||
-          ["cafe", "museum", "shopping", "spa", "cinema", "bowling"].includes(
-            p.category,
-          ),
-      );
-    } else {
-      // Filter for outdoor-friendly categories
-      pool = pinnedPlaces.filter((p) =>
-        [
-          "beach",
-          "park",
-          "activity",
-          "playground",
-          "sports",
-          "attraction",
-          "other",
-        ].includes(p.category),
-      );
-    }
-
-    // If no suitable matches, return null so the section remains empty/hidden
-    if (pool.length === 0) return null;
-
-    return pool[0];
-  });
+  const [advisedPlace, setAdvisedPlace] = useState<CachedPlace | null>(null);
 
   useEffect(() => {
     if (pinnedPlaces.length === 0) {
@@ -428,7 +708,7 @@ export default function PulsTab({
     }
 
     const isCold = weather ? weather.temp < 15 : false;
-    let pool: CachedPlace[] = []; // Start with an empty pool
+    let pool: CachedPlace[] = [];
 
     if (weather?.isRaining || isCold) {
       pool = pinnedPlaces.filter(
@@ -453,7 +733,7 @@ export default function PulsTab({
     }
 
     if (pool.length === 0) {
-      setAdvisedPlace(null); // Clear the tip if nothing fits the weather
+      setAdvisedPlace(null);
     } else {
       const dayOfMonth = new Date().getDate();
       setAdvisedPlace(pool[dayOfMonth % pool.length]);
@@ -470,16 +750,69 @@ export default function PulsTab({
     : null;
   const canNavigateTip = !!adviceMapLink;
 
-  const liveNotices = useMemo(
-    () =>
-      [...announcements]
-        .sort(
-          (a, b) =>
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-        )
-        .slice(0, 4),
-    [announcements],
+  // ─── Smart Announcements: weather-aware sorting ──────
+  const activeConditions = useMemo(
+    () => getActiveWeatherConditions(weather),
+    [weather],
   );
+
+  const scoredNotices: ScoredAnnouncement[] = useMemo(() => {
+    const scored = announcements.map((ann) => {
+      const { score, matchedCondition } = getWeatherRelevanceScore(
+        ann,
+        activeConditions,
+      );
+      return { announcement: ann, weatherScore: score, matchedCondition };
+    });
+
+    scored.sort((a, b) => {
+      const annA = a.announcement;
+      const annB = b.announcement;
+
+      // Tier 1: Warnings always on top
+      const warnA = annA.type === "warning" ? 1 : 0;
+      const warnB = annB.type === "warning" ? 1 : 0;
+      if (warnA !== warnB) return warnB - warnA;
+
+      // Tier 2: High priority
+      const priA = annA.priority === "high" ? 1 : 0;
+      const priB = annB.priority === "high" ? 1 : 0;
+      if (priA !== priB) return priB - priA;
+
+      // Tier 3: Weather relevance score
+      if (a.weatherScore !== b.weatherScore)
+        return b.weatherScore - a.weatherScore;
+
+      // Tier 4: Recency
+      return (
+        new Date(annB.created_at).getTime() -
+        new Date(annA.created_at).getTime()
+      );
+    });
+
+    return scored.slice(0, 4);
+  }, [announcements, activeConditions]);
+
+  const liveNotices = useMemo(
+    () => scoredNotices.map((s) => s.announcement),
+    [scoredNotices],
+  );
+
+  const weatherPromotionMap = useMemo(() => {
+    const map = new Map<
+      string,
+      { score: number; condition: WeatherCondition }
+    >();
+    for (const s of scoredNotices) {
+      if (s.weatherScore > 0) {
+        map.set(s.announcement.id, {
+          score: s.weatherScore,
+          condition: s.matchedCondition,
+        });
+      }
+    }
+    return map;
+  }, [scoredNotices]);
 
   const receptionMapLink =
     getGoogleMapsLink(
@@ -521,6 +854,63 @@ export default function PulsTab({
       initial="initial"
       animate="animate"
     >
+      {/* ═══════════════════════════════════════════════
+         0. MY STAY — Saved Items Section
+         ═══════════════════════════════════════════════ */}
+      <AnimatePresence mode="popLayout">
+        {savedPlaces.length > 0 && (
+          <motion.section
+            key="my-stay"
+            variants={fadeUp}
+            initial="initial"
+            animate="animate"
+            exit={{ opacity: 0, y: -8, transition: { duration: 0.2 } }}
+          >
+            <RowHeader
+              icon={<Heart size={12} strokeWidth={2} />}
+              text={l.myStay}
+              brand={brand}
+            />
+            <div
+              className="overflow-hidden rounded-[18px] bg-white ring-1 ring-stone-200/60"
+              style={{
+                boxShadow:
+                  "0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.03)",
+              }}
+            >
+              <AnimatePresence initial={false}>
+                {savedPlaces.map((place, idx) => (
+                  <motion.div
+                    key={place.id}
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{
+                      opacity: 0,
+                      height: 0,
+                      transition: { duration: 0.2 },
+                    }}
+                    transition={SPRING_TAP}
+                  >
+                    {idx > 0 && <div className="mx-4 h-px bg-stone-100/80" />}
+                    <SavedPlaceRow
+                      place={place}
+                      distance={distanceMap[place.id] ?? ""}
+                      brand={brand}
+                      openLabel={l.open}
+                      closedLabel={l.closed}
+                      onSiteLabel={l.onSite}
+                      lang={lang}
+                      onDirectionsClick={onDirectionsClick}
+                      onRemove={() => removeSaved?.(place.id)}
+                    />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+          </motion.section>
+        )}
+      </AnimatePresence>
+
       {/* ═══════════════════════════════════════════════
          1. ESSENTIALS CARD
          ═══════════════════════════════════════════════ */}
@@ -617,7 +1007,7 @@ export default function PulsTab({
             )}
           </div>
 
-          {/* Quick info pills — ★ FIX: added flex-wrap */}
+          {/* Quick info pills */}
           {(hasCheckout || hasTrash || hasEmergency) && (
             <>
               <div className="mx-4 h-px bg-stone-100" />
@@ -698,6 +1088,7 @@ export default function PulsTab({
           )}
         </div>
       </motion.section>
+
       {internalLocations.filter((loc) => loc.is_active).length > 0 && (
         <motion.section variants={fadeUp}>
           <RowHeader
@@ -737,8 +1128,9 @@ export default function PulsTab({
           </div>
         </motion.section>
       )}
+
       {/* ═══════════════════════════════════════════════
-         2. ANNOUNCEMENTS
+         2. ANNOUNCEMENTS (Smart Weather-Aware Sorting)
          ═══════════════════════════════════════════════ */}
       <motion.section variants={fadeUp}>
         <RowHeader
@@ -762,12 +1154,28 @@ export default function PulsTab({
                 "0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.03)",
             }}
           >
-            {liveNotices.map((ann, idx) => (
-              <React.Fragment key={ann.id}>
-                {idx > 0 && <div className="mx-4 h-px bg-stone-100" />}
-                <CompactNoticeRow ann={ann} brand={brand} lang={lang} />
-              </React.Fragment>
-            ))}
+            {liveNotices.map((ann, idx) => {
+              const promotion = weatherPromotionMap.get(ann.id);
+              return (
+                <React.Fragment key={ann.id}>
+                  {idx > 0 && <div className="mx-4 h-px bg-stone-100" />}
+                  <CompactNoticeRow
+                    ann={ann}
+                    brand={brand}
+                    lang={lang}
+                    weatherPromotion={
+                      promotion
+                        ? {
+                            condition: promotion.condition,
+                            isExplicit: promotion.score === 2,
+                            label: l.weatherTip,
+                          }
+                        : null
+                    }
+                  />
+                </React.Fragment>
+              );
+            })}
           </div>
         ) : (
           <EmptyNotices title={l.noNotices} subtitle={l.noNoticesSub} />
@@ -1049,14 +1457,101 @@ function QuickPill({
   );
 }
 
+/* ── Weather condition icon helper ───────────────────── */
+
+function WeatherConditionIcon({
+  condition,
+  size = 9,
+}: {
+  condition: WeatherCondition;
+  size?: number;
+}) {
+  switch (condition) {
+    case "rain":
+      return <CloudRain size={size} strokeWidth={2.5} />;
+    case "heat":
+      return <Flame size={size} strokeWidth={2.5} />;
+    case "cold":
+      return <Snowflake size={size} strokeWidth={2.5} />;
+    case "wind":
+      return <Wind size={size} strokeWidth={2.5} />;
+    default:
+      return <Thermometer size={size} strokeWidth={2.5} />;
+  }
+}
+
+/* ── Weather promotion badge colors ──────────────────── */
+
+function getWeatherBadgeStyle(
+  condition: WeatherCondition,
+  brand: string,
+): {
+  bg: string;
+  text: string;
+  border: string;
+  iconColor: string;
+  rowBg: string;
+} {
+  switch (condition) {
+    case "rain":
+      return {
+        bg: "rgba(56,189,248,0.08)",
+        text: "#0284c7",
+        border: "rgba(56,189,248,0.2)",
+        iconColor: "#38bdf8",
+        rowBg: "rgba(56,189,248,0.03)",
+      };
+    case "heat":
+      return {
+        bg: "rgba(251,146,60,0.08)",
+        text: "#ea580c",
+        border: "rgba(251,146,60,0.2)",
+        iconColor: "#fb923c",
+        rowBg: "rgba(251,146,60,0.03)",
+      };
+    case "cold":
+      return {
+        bg: "rgba(147,197,253,0.12)",
+        text: "#2563eb",
+        border: "rgba(147,197,253,0.25)",
+        iconColor: "#93c5fd",
+        rowBg: "rgba(147,197,253,0.04)",
+      };
+    case "wind":
+      return {
+        bg: "rgba(148,163,184,0.1)",
+        text: "#475569",
+        border: "rgba(148,163,184,0.2)",
+        iconColor: "#94a3b8",
+        rowBg: "rgba(148,163,184,0.03)",
+      };
+    default:
+      return {
+        bg: hexToRgba(brand, 0.07),
+        text: brand,
+        border: hexToRgba(brand, 0.15),
+        iconColor: brand,
+        rowBg: hexToRgba(brand, 0.02),
+      };
+  }
+}
+
+/* ── Compact Notice Row (with weather promotion) ─────── */
+
 function CompactNoticeRow({
   ann,
   brand,
   lang,
+  weatherPromotion,
 }: {
   ann: Announcement;
   brand: string;
   lang: Lang;
+  weatherPromotion: {
+    condition: WeatherCondition;
+    isExplicit: boolean;
+    label: string;
+  } | null;
 }) {
   const cfg = {
     event: { emoji: "🎉", dot: brand },
@@ -1066,10 +1561,50 @@ function CompactNoticeRow({
 
   const { title, content } = getAnnouncementText(ann, lang);
 
+  const isPromoted = weatherPromotion !== null;
+  const badgeStyle = isPromoted
+    ? getWeatherBadgeStyle(weatherPromotion.condition, brand)
+    : null;
+
   return (
-    <div className="flex items-start gap-3 px-4 py-3">
+    <div
+      className="relative flex items-start gap-3 px-4 py-3 transition-colors"
+      style={
+        isPromoted && badgeStyle
+          ? { backgroundColor: badgeStyle.rowBg }
+          : undefined
+      }
+    >
+      {/* Subtle left accent bar for promoted notices */}
+      {isPromoted && badgeStyle && (
+        <div
+          className="absolute left-0 top-0 h-full w-[3px] rounded-l-[18px]"
+          style={{ backgroundColor: badgeStyle.iconColor, opacity: 0.4 }}
+        />
+      )}
+
       <span className="mt-0.5 text-sm leading-none">{cfg.emoji}</span>
       <div className="min-w-0 flex-1">
+        {/* Weather promotion badge */}
+        {isPromoted && badgeStyle && (
+          <div className="mb-1.5 flex items-center gap-1">
+            <span
+              className="inline-flex items-center gap-1 rounded-full px-2 py-[3px] text-[8px] font-black uppercase tracking-[0.15em]"
+              style={{
+                backgroundColor: badgeStyle.bg,
+                color: badgeStyle.text,
+                boxShadow: `0 0 0 1px ${badgeStyle.border}`,
+              }}
+            >
+              <WeatherConditionIcon
+                condition={weatherPromotion.condition}
+                size={8}
+              />
+              {weatherPromotion.label}
+            </span>
+          </div>
+        )}
+
         <div className="flex items-center gap-2">
           <p
             className="text-[13px] font-bold text-stone-800"
@@ -1082,7 +1617,10 @@ function CompactNoticeRow({
           </p>
           <span
             className="h-1.5 w-1.5 shrink-0 rounded-full"
-            style={{ backgroundColor: cfg.dot }}
+            style={{
+              backgroundColor:
+                isPromoted && badgeStyle ? badgeStyle.iconColor : cfg.dot,
+            }}
           />
         </div>
         <p
@@ -1095,6 +1633,165 @@ function CompactNoticeRow({
           {content}
         </p>
       </div>
+    </div>
+  );
+}
+
+/* ── Saved Place Row (My Stay) ───────────────────────── */
+
+function SavedPlaceRow({
+  place,
+  distance,
+  brand,
+  openLabel,
+  closedLabel,
+  onSiteLabel,
+  lang,
+  onDirectionsClick,
+  onRemove,
+}: {
+  place: CachedPlace;
+  distance: string;
+  brand: string;
+  openLabel: string;
+  closedLabel: string;
+  onSiteLabel: string;
+  lang: Lang;
+  onDirectionsClick?: (placeId: string) => void;
+  onRemove: () => void;
+}) {
+  const mapLink = getGoogleMapsLink(
+    place.latitude,
+    place.longitude,
+    place.address,
+  );
+  const canNavigate = !!mapLink;
+
+  const hoursData = getTodaysOpeningHours(place.raw_data);
+  const isOpen = hoursData?.isOpenNow ?? null;
+
+  const ownerNote = getOwnerNote(place, lang);
+
+  return (
+    <div className="flex items-center gap-3 px-4 py-3">
+      {/* Remove button */}
+      <motion.button
+        onClick={(e) => {
+          e.stopPropagation();
+          onRemove();
+        }}
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
+        style={{ backgroundColor: "rgba(239,68,68,0.06)" }}
+        whileTap={{ scale: 0.8 }}
+        transition={SPRING_TAP}
+        aria-label="Remove from My Stay"
+      >
+        <Heart
+          size={13}
+          strokeWidth={2}
+          fill="#ef4444"
+          className="text-red-500"
+        />
+      </motion.button>
+
+      {/* Emoji icon */}
+      <div
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] text-sm"
+        style={{ backgroundColor: hexToRgba(brand, 0.05) }}
+      >
+        {EMOJI[place.category] ?? "📍"}
+      </div>
+
+      {/* Place info */}
+      {canNavigate ? (
+        <motion.a
+          href={mapLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex min-w-0 flex-1 items-center gap-3"
+          whileTap={{ scale: 0.98 }}
+          transition={SPRING_TAP}
+          onClick={() => onDirectionsClick?.(place.id)}
+        >
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[13px] font-bold text-stone-800">
+              {place.name}
+            </p>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {place.is_on_site ? (
+                <span
+                  className="text-[10px] font-black uppercase tracking-[0.15em]"
+                  style={{ color: brand }}
+                >
+                  {onSiteLabel}
+                </span>
+              ) : distance ? (
+                <span className="text-[10px] font-black uppercase tracking-[0.15em] text-stone-300">
+                  {distance}
+                </span>
+              ) : null}
+
+              {place.rating !== null && place.rating > 0 && (
+                <>
+                  <span className="text-stone-200">·</span>
+                  <span className="text-[10px] font-black text-amber-500">
+                    ★ {place.rating.toFixed(1)}
+                  </span>
+                </>
+              )}
+              {ownerNote && (
+                <>
+                  <span className="text-stone-200">·</span>
+                  <span
+                    className="max-w-[80px] truncate text-[10px] font-black uppercase tracking-[0.1em]"
+                    style={{ color: brand }}
+                  >
+                    {ownerNote}
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+
+          {isOpen !== null && (
+            <span
+              className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.1em] ${
+                isOpen
+                  ? "bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200/60"
+                  : "bg-stone-50 text-stone-400 ring-1 ring-stone-200/60"
+              }`}
+            >
+              {isOpen ? openLabel : closedLabel}
+            </span>
+          )}
+
+          <ChevronRight
+            size={13}
+            strokeWidth={2}
+            className="shrink-0 text-stone-300"
+          />
+        </motion.a>
+      ) : (
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13px] font-bold text-stone-800">
+            {place.name}
+          </p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {place.is_on_site ? (
+              <span
+                className="text-[10px] font-black uppercase tracking-[0.15em]"
+                style={{ color: brand }}
+              >
+                {onSiteLabel}
+              </span>
+            ) : distance ? (
+              <span className="text-[10px] font-black uppercase tracking-[0.15em] text-stone-300">
+                {distance}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

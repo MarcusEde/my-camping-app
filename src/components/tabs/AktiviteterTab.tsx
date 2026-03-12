@@ -1,4 +1,3 @@
-// src/components/tabs/AktiviteterTab.tsx
 "use client";
 
 import { SPRING_TAP, STAGGER_CONTAINER, STAGGER_ITEM } from "@/lib/constants";
@@ -17,18 +16,33 @@ import type {
   PromotedPartner,
 } from "@/types/database";
 import type { Lang } from "@/types/guest";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowUpRight,
   Award,
   CalendarHeart,
+  Check,
+  Copy,
   Globe,
   Phone,
   Store,
   Ticket,
 } from "lucide-react";
-import React from "react";
-import { trackPartnerClick } from "./actions";
+import React, { useEffect, useState } from "react";
+import { trackPartnerClick, trackRedemption } from "./actions";
+
+/* ── Coupon label translations (self-contained) ──────── */
+
+const COUPON_LABELS: Record<string, { claim: string; revealed: string }> = {
+  sv: { claim: "Hämta rabatt", revealed: "Din rabattkod" },
+  en: { claim: "Claim Discount", revealed: "Your discount code" },
+  de: { claim: "Rabatt einlösen", revealed: "Ihr Rabattcode" },
+  da: { claim: "Hent rabat", revealed: "Din rabatkode" },
+  nl: { claim: "Korting claimen", revealed: "Uw kortingscode" },
+  no: { claim: "Hent rabatt", revealed: "Din rabattkode" },
+};
+
+/* ── Props ───────────────────────────────────────────── */
 
 interface Props {
   campground: Campground;
@@ -94,6 +108,7 @@ export default function AktiviteterTab({
               <PartnerCard
                 key={partner.id}
                 partner={partner}
+                campgroundId={campground.id}
                 brand={brand}
                 lang={lang}
                 isSwedish={isSwedish}
@@ -194,12 +209,14 @@ function EventCard({
 
 function PartnerCard({
   partner,
+  campgroundId,
   brand,
   lang,
   isSwedish,
   labels,
 }: {
   partner: PromotedPartner;
+  campgroundId: string;
   brand: string;
   lang: Lang;
   isSwedish: boolean;
@@ -249,6 +266,17 @@ function PartnerCard({
           />
         )}
 
+        {/* ── Coupon code reveal ── */}
+        {partner.coupon_code && (
+          <CouponReveal
+            couponCode={partner.coupon_code}
+            partnerId={partner.id}
+            campgroundId={campgroundId}
+            brand={brand}
+            lang={lang}
+          />
+        )}
+
         <PartnerCTAs
           websiteUrl={partner.website_url}
           phone={partner.phone}
@@ -259,6 +287,136 @@ function PartnerCard({
         />
       </div>
     </motion.div>
+  );
+}
+
+/* ── Coupon Reveal ───────────────────────────────────── */
+
+function CouponReveal({
+  couponCode,
+  partnerId,
+  campgroundId,
+  brand,
+  lang,
+}: {
+  couponCode: string;
+  partnerId: string;
+  campgroundId: string;
+  brand: string;
+  lang: Lang;
+}) {
+  const storageKey = `redeemed_${partnerId}`;
+
+  // Always start false on both server and client — no hydration mismatch
+  const [revealed, setRevealed] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  const t = COUPON_LABELS[lang] ?? COUPON_LABELS.en;
+
+  // Restore persisted state AFTER hydration completes
+  useEffect(() => {
+    if (localStorage.getItem(storageKey) === "true") {
+      setRevealed(true);
+    }
+    setMounted(true);
+  }, [storageKey]);
+
+  const handleClaim = () => {
+    setRevealed(true);
+    localStorage.setItem(storageKey, "true");
+    trackRedemption(partnerId, campgroundId);
+  };
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(couponCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard API unavailable
+    }
+  };
+
+  // Prevent flash: don't render anything until we know the real state
+  if (!mounted) {
+    return (
+      <div className="mb-3">
+        <div
+          className="flex w-full items-center justify-center gap-2 rounded-[14px] border-2 border-dashed py-2.5 text-[11px] font-black uppercase tracking-[0.1em]"
+          style={{
+            borderColor: hexToRgba(brand, 0.3),
+            color: brand,
+            backgroundColor: hexToRgba(brand, 0.03),
+          }}
+        >
+          <Ticket size={13} strokeWidth={2.5} />
+          {t.claim}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-3">
+      <AnimatePresence mode="wait" initial={false}>
+        {!revealed ? (
+          <motion.button
+            key="claim-btn"
+            onClick={handleClaim}
+            className="flex w-full items-center justify-center gap-2 rounded-[14px] border-2 border-dashed py-2.5 text-[11px] font-black uppercase tracking-[0.1em] transition-colors"
+            style={{
+              borderColor: hexToRgba(brand, 0.3),
+              color: brand,
+              backgroundColor: hexToRgba(brand, 0.03),
+            }}
+            initial={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            whileHover={{ backgroundColor: hexToRgba(brand, 0.07) }}
+            whileTap={{ scale: 0.96 }}
+            transition={{ type: "spring", stiffness: 500, damping: 30 }}
+          >
+            <Ticket size={13} strokeWidth={2.5} />
+            {t.claim}
+          </motion.button>
+        ) : (
+          <motion.div
+            key="code-display"
+            className="flex w-full items-center justify-between rounded-[14px] px-4 py-2.5"
+            style={{ backgroundColor: hexToRgba(brand, 0.06) }}
+            initial={{ opacity: 0, scale: 0.95, y: 4 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 500, damping: 30 }}
+          >
+            <div className="min-w-0">
+              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-stone-400">
+                {t.revealed}
+              </p>
+              <p
+                className="mt-0.5 truncate text-[16px] font-black tracking-wider"
+                style={{ color: brand }}
+              >
+                {couponCode}
+              </p>
+            </div>
+            <motion.button
+              onClick={handleCopy}
+              className="ml-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] transition-colors"
+              style={{ backgroundColor: hexToRgba(brand, 0.08) }}
+              whileTap={{ scale: 0.9 }}
+              transition={SPRING_TAP}
+              aria-label="Copy code"
+            >
+              {copied ? (
+                <Check size={14} style={{ color: brand }} strokeWidth={2.5} />
+              ) : (
+                <Copy size={14} style={{ color: brand }} strokeWidth={2} />
+              )}
+            </motion.button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 

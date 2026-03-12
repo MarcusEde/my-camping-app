@@ -19,6 +19,7 @@ import {
   Clock,
   Compass,
   ExternalLink,
+  Heart,
   MapPin,
   MessageCircle,
   Star,
@@ -31,6 +32,8 @@ interface Props {
   lang: Lang;
   distanceMap: RoadDistanceMap;
   onDirectionsClick?: (placeId: string) => void;
+  isSaved?: (id: string) => boolean;
+  toggleSaved?: (id: string) => void;
 }
 
 export default function UtforskaTab({
@@ -39,6 +42,8 @@ export default function UtforskaTab({
   lang,
   distanceMap,
   onDirectionsClick,
+  isSaved,
+  toggleSaved,
 }: Props) {
   const brand = campground.primary_color || "#2A3C34";
   const l = utforskaLabels[lang];
@@ -81,6 +86,8 @@ export default function UtforskaTab({
               isSwedish={isSwedish}
               distance={distanceMap[place.id] ?? ""}
               onDirectionsClick={onDirectionsClick}
+              saved={isSaved?.(place.id) ?? false}
+              onToggleSave={() => toggleSaved?.(place.id)}
             />
           ))}
         </div>
@@ -149,6 +156,8 @@ function PlaceCard({
   isSwedish,
   distance,
   onDirectionsClick,
+  saved,
+  onToggleSave,
 }: {
   place: CachedPlace;
   brand: string;
@@ -157,6 +166,8 @@ function PlaceCard({
   isSwedish: boolean;
   distance: string;
   onDirectionsClick?: (placeId: string) => void;
+  saved: boolean;
+  onToggleSave: () => void;
 }) {
   const catStyle = getCategoryStyle(place.category);
   const angle = gradientAngle(place.id);
@@ -186,6 +197,9 @@ function PlaceCard({
         isPinned={place.is_pinned}
         rating={place.rating}
         staffPickLabel={l.staffPick}
+        saved={saved}
+        onToggleSave={onToggleSave}
+        brand={brand}
       />
 
       {/* ── Card body ───────────────────────────── */}
@@ -232,12 +246,18 @@ function CardGradientHeader({
   isPinned,
   rating,
   staffPickLabel,
+  saved,
+  onToggleSave,
+  brand,
 }: {
   catStyle: ReturnType<typeof getCategoryStyle>;
   angle: number;
   isPinned: boolean;
   rating: number | null;
   staffPickLabel: string;
+  saved: boolean;
+  onToggleSave: () => void;
+  brand: string;
 }) {
   return (
     <div
@@ -309,6 +329,41 @@ function CardGradientHeader({
           </span>
         </div>
       )}
+
+      {/* ── Heart / Save toggle ─────────────────── */}
+      <motion.button
+        onClick={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          onToggleSave();
+        }}
+        className="absolute right-3 top-3 z-20 flex h-8 w-8 items-center justify-center rounded-full"
+        style={{
+          backgroundColor: saved
+            ? "rgba(255,255,255,0.95)"
+            : "rgba(255,255,255,0.7)",
+          backdropFilter: "blur(4px)",
+          WebkitBackdropFilter: "blur(4px)",
+          boxShadow: saved
+            ? `0 2px 8px ${hexToRgba(brand, 0.2)}`
+            : "0 1px 4px rgba(0,0,0,0.08)",
+        }}
+        whileTap={{ scale: 0.8 }}
+        transition={{ type: "spring", stiffness: 440, damping: 24 }}
+        aria-label={saved ? "Remove from My Stay" : "Save to My Stay"}
+      >
+        <motion.div
+          animate={saved ? { scale: [1, 1.3, 1] } : { scale: 1 }}
+          transition={{ duration: 0.3, ease: "easeOut" }}
+        >
+          <Heart
+            size={14}
+            strokeWidth={2}
+            fill={saved ? "#ef4444" : "none"}
+            className={saved ? "text-red-500" : "text-stone-500"}
+          />
+        </motion.div>
+      </motion.button>
 
       {rating != null && (
         <span

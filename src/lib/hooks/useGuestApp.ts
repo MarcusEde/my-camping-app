@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { prefetchAiPlan } from "@/app/camp/[slug]/ai-action";
+import { useSavedItems } from "@/lib/hooks/useSavedItems";
 import type { RoadDistanceMap } from "@/lib/routing";
 import { getOrCreateSessionId } from "@/lib/session";
 import { trackDirectionsClick, trackPageView } from "@/lib/tracking";
@@ -46,6 +47,10 @@ export function useGuestApp({
   const prefetchedKey = useRef("");
 
   const visiblePlaces = places.filter((p) => !p.is_hidden);
+
+  // Saved items (My Stay) state
+  const { savedIds, toggleSaved, isSaved, removeSaved, clearAll } =
+    useSavedItems();
 
   // Set current hour on mount
   useEffect(() => {
@@ -111,5 +116,11 @@ export function useGuestApp({
     scrollRef,
     switchTab,
     handleDirectionsClick,
+    // Saved items (My Stay)
+    savedIds,
+    toggleSaved,
+    isSaved,
+    removeSaved,
+    clearAllSaved: clearAll,
   };
 }

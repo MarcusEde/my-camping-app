@@ -8,6 +8,7 @@ import {
   MessageSquare,
   Navigation,
   Star,
+  Ticket,
   TrendingDown,
   TrendingUp,
   Users,
@@ -40,8 +41,8 @@ export default function AnalyticsDashboard({ campgroundId, brand }: Props) {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[...Array(4)].map((_, i) => (
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
+        {[...Array(5)].map((_, i) => (
           <div
             key={i}
             className="h-24 animate-pulse rounded-[16px] bg-stone-100"
@@ -78,7 +79,7 @@ export default function AnalyticsDashboard({ campgroundId, brand }: Props) {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         <KPI
           icon={<Eye size={15} />}
           label="Besök"
@@ -98,6 +99,13 @@ export default function AnalyticsDashboard({ campgroundId, brand }: Props) {
           label="Planeraren"
           value={stats.plannerUsage}
           color="#7c3aed"
+        />
+        <KPI
+          icon={<Ticket size={15} />}
+          label="Inlösta erbjudanden"
+          value={stats.totalRedemptions}
+          change={stats.weekOverWeek.redemptionsChange}
+          color="#e11d48"
         />
         <KPI
           icon={<Star size={15} />}

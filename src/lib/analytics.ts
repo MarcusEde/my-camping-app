@@ -16,43 +16,64 @@ export async function getAnalyticsStats(
   const prevStart = new Date(since);
   prevStart.setDate(prevStart.getDate() - days);
 
-  const [viewsRes, prevViewsRes, feedbackRes, directionsRes] =
-    await Promise.all([
-      supabase
-        .from("page_views")
-        .select("tab, session_id, created_at")
-        .eq("campground_id", campgroundId)
-        .gte("created_at", sinceISO),
-      supabase
-        .from("page_views")
-        .select("session_id")
-        .eq("campground_id", campgroundId)
-        .gte("created_at", prevStart.toISOString())
-        .lt("created_at", sinceISO),
-      supabase
-        .from("guest_feedback")
-        .select("rating, comment, created_at")
-        .eq("campground_id", campgroundId)
-        .gte("created_at", sinceISO)
-        .order("created_at", { ascending: false })
-        .limit(20),
-      supabase
-        .from("directions_clicks")
-        .select("place_id")
-        .eq("campground_id", campgroundId)
-        .gte("created_at", sinceISO),
-    ]);
+  const [
+    viewsRes,
+    prevViewsRes,
+    feedbackRes,
+    directionsRes,
+    redemptionsRes,
+    prevRedemptionsRes,
+  ] = await Promise.all([
+    supabase
+      .from("page_views")
+      .select("tab, session_id, created_at")
+      .eq("campground_id", campgroundId)
+      .gte("created_at", sinceISO),
+    supabase
+      .from("page_views")
+      .select("session_id")
+      .eq("campground_id", campgroundId)
+      .gte("created_at", prevStart.toISOString())
+      .lt("created_at", sinceISO),
+    supabase
+      .from("guest_feedback")
+      .select("rating, comment, created_at")
+      .eq("campground_id", campgroundId)
+      .gte("created_at", sinceISO)
+      .order("created_at", { ascending: false })
+      .limit(20),
+    supabase
+      .from("directions_clicks")
+      .select("place_id")
+      .eq("campground_id", campgroundId)
+      .gte("created_at", sinceISO),
+    // ── Redemptions for current period ──
+    supabase
+      .from("redemptions")
+      .select("id")
+      .eq("campground_id", campgroundId)
+      .gte("created_at", sinceISO),
+    // ── Redemptions for previous period (week-over-week) ──
+    supabase
+      .from("redemptions")
+      .select("id")
+      .eq("campground_id", campgroundId)
+      .gte("created_at", prevStart.toISOString())
+      .lt("created_at", sinceISO),
+  ]);
 
   const views = viewsRes.data ?? [];
   const prevViews = prevViewsRes.data ?? [];
   const feedback = feedbackRes.data ?? [];
   const directions = directionsRes.data ?? [];
+  const redemptions = redemptionsRes.data ?? [];
+  const prevRedemptions = prevRedemptionsRes.data ?? [];
 
   // Unique sessions
   const uniqueSessions = new Set(views.map((v) => v.session_id)).size;
   const prevUniqueSessions = new Set(prevViews.map((v) => v.session_id)).size;
 
-  // Planner usage (your tab ID is "planerare")
+  // Planner usage
   const plannerViews = views.filter((v) => v.tab === "planerare").length;
 
   // Tab breakdown
@@ -81,7 +102,7 @@ export async function getAnalyticsStats(
       ? feedback.reduce((sum, f) => sum + f.rating, 0) / feedback.length
       : null;
 
-  // Top directions places — fetch names separately
+  // Top directions places
   const placeCounts = new Map<string, number>();
   for (const d of directions)
     placeCounts.set(d.place_id, (placeCounts.get(d.place_id) ?? 0) + 1);
@@ -119,6 +140,14 @@ export async function getAnalyticsStats(
           ((uniqueSessions - prevUniqueSessions) / prevUniqueSessions) * 100,
         )
       : 0;
+  const redemptionsChange =
+    prevRedemptions.length > 0
+      ? Math.round(
+          ((redemptions.length - prevRedemptions.length) /
+            prevRedemptions.length) *
+            100,
+        )
+      : 0;
 
   return {
     totalViews: views.length,
@@ -127,6 +156,7 @@ export async function getAnalyticsStats(
     avgRating,
     feedbackCount: feedback.length,
     directionsClicks: directions.length,
+    totalRedemptions: redemptions.length,
     topTabs,
     topPlaces,
     dailyViews,
@@ -135,7 +165,7 @@ export async function getAnalyticsStats(
       comment: f.comment,
       created_at: f.created_at,
     })),
-    weekOverWeek: { viewsChange, guestsChange },
+    weekOverWeek: { viewsChange, guestsChange, redemptionsChange },
   };
 }
 
@@ -145,7 +175,7 @@ export async function getQuickStats(campgroundId: string) {
   const since = new Date();
   since.setDate(since.getDate() - 7);
 
-  const [viewsRes, feedbackRes] = await Promise.all([
+  const [viewsRes, feedbackRes, redemptionsRes] = await Promise.all([
     supabase
       .from("page_views")
       .select("session_id, tab")
@@ -156,10 +186,16 @@ export async function getQuickStats(campgroundId: string) {
       .select("rating")
       .eq("campground_id", campgroundId)
       .gte("created_at", since.toISOString()),
+    supabase
+      .from("redemptions")
+      .select("id")
+      .eq("campground_id", campgroundId)
+      .gte("created_at", since.toISOString()),
   ]);
 
   const views = viewsRes.data ?? [];
   const feedback = feedbackRes.data ?? [];
+  const redemptions = redemptionsRes.data ?? [];
 
   return {
     totalViews: views.length,
@@ -172,5 +208,6 @@ export async function getQuickStats(campgroundId: string) {
           ).toFixed(1)
         : null,
     feedbackCount: feedback.length,
+    totalRedemptions: redemptions.length,
   };
 }
