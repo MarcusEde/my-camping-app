@@ -69,28 +69,18 @@ function swedishMonth(): number {
 }
 
 // ─── Cache layer ────────────────────────────────────────
-//
-// L1 = in-memory Map (within a single serverless invocation)
-// L2 = Supabase table `plan_cache` (survives cold starts)
-//
-// Cache is valid for the entire day (todayStr match).
-// No TTL — plan stays until midnight or weather change.
 
 const l1 = new Map<string, CachedPlanEnvelope>();
-
-/** Track whether we've cleaned up today (per server instance) */
 let lastCleanupDate = "";
 
 async function cacheGet(key: string): Promise<CachedPlanEnvelope | null> {
   const date = todayStr();
 
-  // L1: in-memory
   const mem = l1.get(key);
   if (mem && mem.dateStr === date) {
     return mem;
   }
 
-  // L2: Supabase
   try {
     const supabase = await createClient();
     const { data } = await supabase
@@ -102,7 +92,7 @@ async function cacheGet(key: string): Promise<CachedPlanEnvelope | null> {
     if (data?.envelope) {
       const envelope = data.envelope as CachedPlanEnvelope;
       if (envelope.dateStr === date) {
-        l1.set(key, envelope); // promote to L1
+        l1.set(key, envelope);
         return envelope;
       }
     }
@@ -169,10 +159,6 @@ function pruneL1() {
   }
 }
 
-/**
- * Delete all cache rows from previous days.
- * Runs once per day per server instance — called during prefetch.
- */
 async function maybeCleanupStaleCache(): Promise<void> {
   const today = todayStr();
   if (lastCleanupDate === today) return;
@@ -190,7 +176,7 @@ async function maybeCleanupStaleCache(): Promise<void> {
     }
   } catch (e) {
     console.warn("[AI Planner] Cleanup error:", e);
-    lastCleanupDate = ""; // retry next request
+    lastCleanupDate = "";
   }
 }
 
@@ -396,6 +382,7 @@ interface DayContext {
   month: number;
   hour: number;
   season: "spring" | "summer" | "autumn" | "winter";
+  /** 0–30: daily rotation for variety. Changes every day per campground. */
   rotationSeed: number;
 }
 
@@ -462,11 +449,12 @@ function getDayCtx(lang: PlanLang, campId?: string): DayContext {
           ? "autumn"
           : "winter";
 
+  // Use larger modulus for more daily variety (31 unique patterns per camp)
   const dateNum = parseInt(todayStr().replace(/-/g, ""), 10);
   const campHash = (campId ?? "")
     .split("")
     .reduce((a, c) => a + c.charCodeAt(0), 0);
-  const rotationSeed = (dateNum + campHash) % 7;
+  const rotationSeed = (dateNum + campHash) % 31;
 
   return {
     dayName: names[lang][dow],
@@ -534,7 +522,6 @@ const INDOOR_CATS: PlaceCategory[] = [
   "cinema",
 ];
 
-/** Categories that are fully exposed outdoors */
 const EXPOSED_OUTDOOR_CATS: PlaceCategory[] = [
   "beach",
   "playground",
@@ -544,17 +531,54 @@ const EXPOSED_OUTDOOR_CATS: PlaceCategory[] = [
 
 // ─── Name-based activity detection ──────────────────────
 
-/** Water sports — need warm weather, no wind */
 const WATER_ACTIVITY_RE =
   /\b(sup|kayak|kano|canoe|paddle|surf|sail|segel|bad|swim|dykning|dive|snork|jet.?ski|water.?ski|wakeboard|windsurf|kite|vattenski|vattensport|båt|boat|fishing|fiske)/i;
 
-/** Exposed outdoor activities — penalized in cold/rain */
 const EXPOSED_ACTIVITY_RE =
   /\b(golf|mini.?golf|klättr|climb|zip.?line|äventyr|adventure|skoter|snowmobil|riding|ridning|hike|vandr|cykel|bike|segway|paintball|laser.?tag.?out|skid|ski[^n]|skridskor|skate|rink)/i;
 
-/** Walking trails — viable in cold-but-dry weather with warm clothes */
 const TRAIL_WALK_RE =
   /\b(promenad|kustpromenad|vandringsled|trail|walk|stig|led\b|naturled|strandpromenad|coastal.?walk|nature.?walk|hiking.?trail|rundslinga|loop|spång|boardwalk)/i;
+
+// ─── Deterministic shuffle ──────────────────────────────
+
+/**
+ * Deterministic shuffle of candidates within a score band.
+ * Places within `bandSize` points of each other get shuffled
+ * based on the rotation seed, so different days pick different
+ * places even when scores are similar.
+ */
+function shuffleWithinBands<T extends { score: number }>(
+  items: T[],
+  seed: number,
+  bandSize = 15,
+): T[] {
+  if (items.length <= 1) return items;
+
+  const result: T[] = [];
+  let remaining = [...items];
+
+  while (remaining.length > 0) {
+    const topScore = remaining[0].score;
+    const bandEnd = remaining.findIndex(
+      (item) => topScore - item.score > bandSize,
+    );
+    const bandItems =
+      bandEnd === -1 ? remaining.splice(0) : remaining.splice(0, bandEnd);
+
+    // Deterministic shuffle within the band using seed
+    for (let i = bandItems.length - 1; i > 0; i--) {
+      const j =
+        (((seed * 31 + i * 17 + bandItems.length * 7) % (i + 1)) + (i + 1)) %
+        (i + 1);
+      [bandItems[i], bandItems[j]] = [bandItems[j], bandItems[i]];
+    }
+
+    result.push(...bandItems);
+  }
+
+  return result;
+}
 
 // ─── Scoring ────────────────────────────────────────────
 
@@ -579,7 +603,7 @@ function scorePlaces(
 ): Scored[] {
   const highWind = wind >= 10;
 
-  return places
+  const scored = places
     .filter((p) => !p.is_hidden)
     .map((p): Scored => {
       let s = 50;
@@ -616,22 +640,18 @@ function scorePlaces(
         if (EXPOSED_OUTDOOR_CATS.includes(p.category)) s -= 35;
         if (temp < 10 && !p.is_indoor) s -= 10;
       } else {
-        // Hot: beach & park bonus
         if (temp > 22 && p.category === "beach" && !highWind) s += 25;
         else if (temp > 18 && p.category === "beach") s += 10;
         if (temp > 20 && p.category === "park") s += 10;
 
-        // Cold thresholds (stack for very cold temps)
         if (temp < 12 && !p.is_indoor) s -= 8;
-        if (temp < 8 && !p.is_indoor) s -= 15; // cumulative: -23
-        if (temp < 5 && !p.is_indoor) s -= 15; // cumulative: -38
-        if (temp < 0 && !p.is_indoor) s -= 15; // cumulative: -53
+        if (temp < 8 && !p.is_indoor) s -= 15;
+        if (temp < 5 && !p.is_indoor) s -= 15;
+        if (temp < 0 && !p.is_indoor) s -= 15;
 
-        // Exposed outdoor categories get extra cold penalty
         if (temp < 8 && EXPOSED_OUTDOOR_CATS.includes(p.category)) s -= 15;
         if (temp < 5 && EXPOSED_OUTDOOR_CATS.includes(p.category)) s -= 10;
 
-        // Cold indoor boost (cozy factor)
         if (temp < 10 && p.is_indoor) s += 15;
         if (temp < 5 && p.is_indoor) s += 10;
         if (temp < 5 && INDOOR_CATS.includes(p.category)) s += 10;
@@ -652,28 +672,25 @@ function scorePlaces(
 
       if (isWaterActivity) {
         if (temp < 18) s -= 30;
-        if (temp < 12) s -= 20; // cumulative: -50 on top of generic outdoor
+        if (temp < 12) s -= 20;
         if (rain) s -= 15;
         if (highWind) s -= 20;
       }
 
       if (isExposedActivity && !p.is_indoor) {
         if (temp < 8) s -= 15;
-        if (temp < 5) s -= 10; // cumulative: -25 on top of generic outdoor
+        if (temp < 5) s -= 10;
         if (rain) s -= 10;
       }
 
       // ── Trail/walk rescue ──
-      // Walking trails are viable in cold-but-dry weather with warm clothes.
-      // Undo some of the harsh outdoor penalties for trails specifically.
       const isTrailWalk = TRAIL_WALK_RE.test(nameLower);
-
       if (isTrailWalk && !rain) {
-        if (temp >= 0 && temp < 12) s += 25; // partially undo cold outdoor penalty
-        if (temp >= 0 && temp < 5) s += 10; // extra rescue for very cold
+        if (temp >= 0 && temp < 12) s += 25;
+        if (temp >= 0 && temp < 5) s += 10;
       }
       if (isTrailWalk && rain) {
-        s -= 10; // wet trails are worse than other outdoor options
+        s -= 10;
       }
 
       // ── Weekend boost ──
@@ -687,9 +704,11 @@ function scorePlaces(
       const hours = getPlaceHours(p);
       if (hours.isClosedToday) s -= 200;
 
-      // ── Daily variety rotation ──
+      // ── Daily variety boost ──
+      // Wider range (-20 to +20) with larger modulus (41 values)
+      // so patterns don't repeat for weeks
       const ih = p.id.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
-      const varietyBoost = ((rotationSeed * 17 + ih) % 19) - 9;
+      const varietyBoost = ((rotationSeed * 23 + ih * 13) % 41) - 20;
       s += varietyBoost;
 
       return {
@@ -704,6 +723,9 @@ function scorePlaces(
     })
     .filter((s) => !s.isClosedToday)
     .sort((a, b) => b.score - a.score);
+
+  // Shuffle within score bands so places with similar scores rotate daily
+  return shuffleWithinBands(scored, rotationSeed, 15);
 }
 
 // ─── Selection ──────────────────────────────────────────
@@ -908,7 +930,7 @@ function buildPrompt(
   periodsToGenerate?: Period[],
 ): string {
   const safeCampName = sanitizeForPrompt(campground.name);
-  const vibe = DAILY_VIBES[day.rotationSeed];
+  const vibe = DAILY_VIBES[day.rotationSeed % DAILY_VIBES.length];
 
   const fmt = (s: Scored) => {
     const safePlaceName = sanitizeForPrompt(s.place.name);
@@ -1008,7 +1030,7 @@ function buildPrompt(
 
   const coldWarning =
     weather && weather.temp < 8
-      ? `\nIMPORTANT: It is only ${weather.temp}°C. Strongly prefer indoor activities. Walking trails are OK if you mention dressing warm. Do NOT suggest water sports, swimming outdoors, or beach activities.`
+      ? `\nIMPORTANT: It is cold outside. Strongly prefer indoor activities. Walking trails are OK if you mention dressing warm. Do NOT suggest water sports, swimming outdoors, or beach activities.`
       : "";
 
   return `Write a day plan for camping guests at "${safeCampName}".
@@ -1033,7 +1055,8 @@ Rules:
 - CRITICAL: Each place has opening hours listed (e.g., "open 09:00–17:00"). The "time" you suggest MUST fall within those hours. Never schedule outside.
 - Places marked ON-SITE are within the campground — say "right here at camp" or similar, never driving directions.
 - ${!periodsToGenerate || periodsToGenerate.includes("evening") ? "End with a varied evening-at-camp item. Pick from: campfire, stargazing, sunset walk, board games, movie night, marshmallows, BBQ, or relaxing. Match to weather and season." : ""}
-- "description": 1–2 SHORT sentences. Local friend tone. Mention weather naturally. Be creative and specific — avoid generic phrases.
+- "description": 1–2 SHORT sentences. Local friend tone. Be creative and specific — avoid generic phrases.
+- CRITICAL: Do NOT mention exact temperature numbers (like "4°C" or "25 degrees") in descriptions or tips. Use descriptive words instead: "chilly", "brisk", "cold", "mild", "warm", "hot", "gorgeous". The exact temperature is already shown in the UI.
 - "tip": max 8 words. Distance, rating, hours, or weather note. Omit if nothing useful.
 - Do NOT say "recommended" or "promoted". Sound natural.
 - ONLY use places listed above. Use exact id values for placeId.
@@ -1200,7 +1223,7 @@ function fallback(
   const weatherAdj = rain
     ? "Despite the rain, "
     : temp > 25
-      ? "It's a gorgeous warm day — "
+      ? "What a gorgeous day — "
       : temp < 5
         ? "It's freezing out! "
         : temp < 10
@@ -1360,7 +1383,7 @@ function fallback(
       opts.push({
         emoji: "❄️",
         title: "Winter evening at camp",
-        description: "Cozy up inside. It's cold but that's the charm.",
+        description: "Cozy up inside. Cold outside but charming.",
       });
     if (!opts.length)
       opts.push({
@@ -1404,14 +1427,8 @@ async function callGemini(
           responseMimeType: "application/json",
         },
         safetySettings: [
-          {
-            category: "HARM_CATEGORY_HARASSMENT",
-            threshold: "BLOCK_NONE",
-          },
-          {
-            category: "HARM_CATEGORY_HATE_SPEECH",
-            threshold: "BLOCK_NONE",
-          },
+          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
           {
             category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
             threshold: "BLOCK_NONE",
@@ -1526,14 +1543,8 @@ ${JSON.stringify(toTranslate)}`;
           responseMimeType: "application/json",
         },
         safetySettings: [
-          {
-            category: "HARM_CATEGORY_HARASSMENT",
-            threshold: "BLOCK_NONE",
-          },
-          {
-            category: "HARM_CATEGORY_HATE_SPEECH",
-            threshold: "BLOCK_NONE",
-          },
+          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
           {
             category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
             threshold: "BLOCK_NONE",
@@ -1731,7 +1742,6 @@ async function handleWeatherChange(
   periodWeather: Record<Period, string>;
 }> {
   const existingPlan = existingEnvelope.plan;
-
   const futurePeriods = getFuturePeriods(existingPlan);
 
   if (futurePeriods.length === 0) {
@@ -1757,7 +1767,6 @@ async function handleWeatherChange(
   );
 
   const date = todayStr();
-
   const { plan: newItems, periodWeather: newPw } = await generateBasePlan(
     campground,
     weather,
@@ -1772,11 +1781,9 @@ async function handleWeatherChange(
   const pastItems = existingPlan.filter(
     (item) => !periodsToRegen.includes(item.period),
   );
-  const mergedPlan = [...pastItems, ...newItems].sort((a, b) => {
-    const aMin = getItemMinutes(a.time);
-    const bMin = getItemMinutes(b.time);
-    return aMin - bMin;
-  });
+  const mergedPlan = [...pastItems, ...newItems].sort(
+    (a, b) => getItemMinutes(a.time) - getItemMinutes(b.time),
+  );
 
   const mergedPw = { ...existingEnvelope.periodWeather };
   for (const p of periodsToRegen) {
@@ -1814,7 +1821,7 @@ async function findExistingPlanForDate(
       return data.envelope as CachedPlanEnvelope;
     }
   } catch {
-    // No existing plan found
+    // No existing plan
   }
 
   return null;
@@ -1849,11 +1856,11 @@ export async function getAiPlan(
   const baseKey = mkBaseCacheKey(campground.id, date, wb);
   const translatedKey = mkTranslatedCacheKey(campground.id, date, wb, lang);
 
-  // ── 1. Check translated cache ────────────────────────
+  // 1. Translated cache
   const cachedTranslated = await cacheGet(translatedKey);
   if (cachedTranslated) return cachedTranslated.plan;
 
-  // ── 2. Check base cache — with weather change detection ──
+  // 2. Base cache with weather change detection
   let basePlan: ItineraryItem[];
   let periodWeather: Record<Period, string>;
   const cachedBase = await cacheGet(baseKey);
@@ -1879,18 +1886,12 @@ export async function getAiPlan(
       );
       basePlan = result.plan;
       periodWeather = result.periodWeather;
-
       await cacheDeleteForWeatherChange(campground.id, date);
     } else {
       const inflight = inflightGenerations.get(baseKey);
       if (inflight) {
         basePlan = await inflight;
-        periodWeather = {
-          morning: wb,
-          lunch: wb,
-          afternoon: wb,
-          evening: wb,
-        };
+        periodWeather = { morning: wb, lunch: wb, afternoon: wb, evening: wb };
       } else {
         const promise = generateBasePlan(
           campground,
@@ -1901,7 +1902,6 @@ export async function getAiPlan(
           wb,
           baseKey,
         ).then((r) => r.plan);
-
         inflightGenerations.set(baseKey, promise);
         try {
           basePlan = await promise;
@@ -1927,9 +1927,8 @@ export async function getAiPlan(
     pruneL1();
   }
 
-  // ── 3. Translate ──────────────────────────────────────
+  // 3. Translate
   const placesById = new Map(places.map((p) => [p.id, p]));
-
   let translatedPlan: ItineraryItem[];
   const inflightTr = inflightTranslations.get(translatedKey);
   if (inflightTr) {
@@ -1944,7 +1943,7 @@ export async function getAiPlan(
     }
   }
 
-  // ── 4. Cache translated result ────────────────────────
+  // 4. Cache translated
   await cacheSet(translatedKey, {
     plan: translatedPlan,
     timestamp: Date.now(),
@@ -2033,7 +2032,6 @@ export async function prefetchAiPlan(
   places: CachedPlace[],
   distanceMap?: Record<string, string>,
 ): Promise<void> {
-  // Clean up yesterday's rows (once per day, non-blocking)
   maybeCleanupStaleCache().catch(() => {});
 
   const rain = weather?.isRaining ?? false;
@@ -2093,12 +2091,7 @@ export async function prefetchAiPlan(
       const inflightGen = inflightGenerations.get(baseKey);
       if (inflightGen) {
         basePlan = await inflightGen;
-        periodWeather = {
-          morning: wb,
-          lunch: wb,
-          afternoon: wb,
-          evening: wb,
-        };
+        periodWeather = { morning: wb, lunch: wb, afternoon: wb, evening: wb };
       } else {
         const genPromise = generateBasePlan(
           campground,
