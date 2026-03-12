@@ -69,22 +69,28 @@ function swedishMonth(): number {
 }
 
 // ─── Cache layer ────────────────────────────────────────
+//
+// L1 = in-memory Map (within a single serverless invocation)
+// L2 = Supabase table `plan_cache` (survives cold starts)
+//
+// Cache is valid for the entire day (todayStr match).
+// No TTL — plan stays until midnight or weather change.
 
 const l1 = new Map<string, CachedPlanEnvelope>();
-const CACHE_TTL_MS = 4 * 60 * 60 * 1000;
+
+/** Track whether we've cleaned up today (per server instance) */
+let lastCleanupDate = "";
 
 async function cacheGet(key: string): Promise<CachedPlanEnvelope | null> {
   const date = todayStr();
 
+  // L1: in-memory
   const mem = l1.get(key);
-  if (
-    mem &&
-    mem.dateStr === date &&
-    Date.now() - mem.timestamp < CACHE_TTL_MS
-  ) {
+  if (mem && mem.dateStr === date) {
     return mem;
   }
 
+  // L2: Supabase
   try {
     const supabase = await createClient();
     const { data } = await supabase
@@ -95,11 +101,8 @@ async function cacheGet(key: string): Promise<CachedPlanEnvelope | null> {
 
     if (data?.envelope) {
       const envelope = data.envelope as CachedPlanEnvelope;
-      if (
-        envelope.dateStr === date &&
-        Date.now() - envelope.timestamp < CACHE_TTL_MS
-      ) {
-        l1.set(key, envelope);
+      if (envelope.dateStr === date) {
+        l1.set(key, envelope); // promote to L1
         return envelope;
       }
     }
@@ -161,9 +164,33 @@ function extractCampIdFromKey(key: string): string {
 function pruneL1() {
   if (l1.size < 80) return;
   const today = todayStr();
-  const now = Date.now();
   for (const [k, v] of l1) {
-    if (v.dateStr !== today || now - v.timestamp > CACHE_TTL_MS) l1.delete(k);
+    if (v.dateStr !== today) l1.delete(k);
+  }
+}
+
+/**
+ * Delete all cache rows from previous days.
+ * Runs once per day per server instance — called during prefetch.
+ */
+async function maybeCleanupStaleCache(): Promise<void> {
+  const today = todayStr();
+  if (lastCleanupDate === today) return;
+  lastCleanupDate = today;
+
+  try {
+    const supabase = await createClient();
+    const { count } = await supabase
+      .from("plan_cache")
+      .delete({ count: "exact" })
+      .neq("date_str", today);
+
+    if (count && count > 0) {
+      console.log(`[AI Planner] Cleaned up ${count} stale cache rows`);
+    }
+  } catch (e) {
+    console.warn("[AI Planner] Cleanup error:", e);
+    lastCleanupDate = ""; // retry next request
   }
 }
 
@@ -458,12 +485,20 @@ const WEATHER_LABELS: Record<string, string> = {
   clear: "clear skies",
   nearly_clear: "nearly clear",
   half_clear: "partly cloudy",
+  partly_cloudy: "partly cloudy",
   cloudy: "cloudy",
   overcast: "overcast",
   fog: "foggy",
   light_rain: "light rain showers",
   rain: "rain",
   heavy_rain: "heavy rain",
+  thunderstorm: "thunderstorm",
+  light_sleet: "light sleet",
+  sleet: "sleet",
+  heavy_sleet: "heavy sleet",
+  light_snow: "light snow",
+  snow: "snow",
+  heavy_snow: "heavy snow",
 };
 
 function readableWeather(descKey: string): string {
@@ -499,13 +534,27 @@ const INDOOR_CATS: PlaceCategory[] = [
   "cinema",
 ];
 
-/** Categories that are fully exposed outdoors — worst in cold/wind/rain */
+/** Categories that are fully exposed outdoors */
 const EXPOSED_OUTDOOR_CATS: PlaceCategory[] = [
   "beach",
   "playground",
   "sports",
   "park",
 ];
+
+// ─── Name-based activity detection ──────────────────────
+
+/** Water sports — need warm weather, no wind */
+const WATER_ACTIVITY_RE =
+  /\b(sup|kayak|kano|canoe|paddle|surf|sail|segel|bad|swim|dykning|dive|snork|jet.?ski|water.?ski|wakeboard|windsurf|kite|vattenski|vattensport|båt|boat|fishing|fiske)/i;
+
+/** Exposed outdoor activities — penalized in cold/rain */
+const EXPOSED_ACTIVITY_RE =
+  /\b(golf|mini.?golf|klättr|climb|zip.?line|äventyr|adventure|skoter|snowmobil|riding|ridning|hike|vandr|cykel|bike|segway|paintball|laser.?tag.?out|skid|ski[^n]|skridskor|skate|rink)/i;
+
+/** Walking trails — viable in cold-but-dry weather with warm clothes */
+const TRAIL_WALK_RE =
+  /\b(promenad|kustpromenad|vandringsled|trail|walk|stig|led\b|naturled|strandpromenad|coastal.?walk|nature.?walk|hiking.?trail|rundslinga|loop|spång|boardwalk)/i;
 
 // ─── Scoring ────────────────────────────────────────────
 
@@ -562,20 +611,17 @@ function scorePlaces(
 
       // ── Weather scoring ──
       if (rain) {
-        // Rain: strongly prefer indoor
         if (p.is_indoor) s += 30;
         if (INDOOR_CATS.includes(p.category)) s += 15;
         if (EXPOSED_OUTDOOR_CATS.includes(p.category)) s -= 35;
-        // Rain + cold combo
         if (temp < 10 && !p.is_indoor) s -= 10;
       } else {
-        // Dry weather
         // Hot: beach & park bonus
         if (temp > 22 && p.category === "beach" && !highWind) s += 25;
         else if (temp > 18 && p.category === "beach") s += 10;
         if (temp > 20 && p.category === "park") s += 10;
 
-        // Cold thresholds (these stack for very cold temps)
+        // Cold thresholds (stack for very cold temps)
         if (temp < 12 && !p.is_indoor) s -= 8;
         if (temp < 8 && !p.is_indoor) s -= 15; // cumulative: -23
         if (temp < 5 && !p.is_indoor) s -= 15; // cumulative: -38
@@ -583,12 +629,12 @@ function scorePlaces(
 
         // Exposed outdoor categories get extra cold penalty
         if (temp < 8 && EXPOSED_OUTDOOR_CATS.includes(p.category)) s -= 15;
-        if (temp < 5 && EXPOSED_OUTDOOR_CATS.includes(p.category)) s -= 10; // cumulative: -25 extra
+        if (temp < 5 && EXPOSED_OUTDOOR_CATS.includes(p.category)) s -= 10;
 
         // Cold indoor boost (cozy factor)
         if (temp < 10 && p.is_indoor) s += 15;
-        if (temp < 5 && p.is_indoor) s += 10; // cumulative: +25
-        if (temp < 5 && INDOOR_CATS.includes(p.category)) s += 10; // cumulative: +35
+        if (temp < 5 && p.is_indoor) s += 10;
+        if (temp < 5 && INDOOR_CATS.includes(p.category)) s += 10;
       }
 
       // ── Wind scoring ──
@@ -598,6 +644,37 @@ function scorePlaces(
         if (EXPOSED_OUTDOOR_CATS.includes(p.category)) s -= 5;
       }
       if (highWind && p.is_indoor) s += 10;
+
+      // ── Name-based weather penalties ──
+      const nameLower = p.name.toLowerCase();
+      const isWaterActivity = WATER_ACTIVITY_RE.test(nameLower);
+      const isExposedActivity = EXPOSED_ACTIVITY_RE.test(nameLower);
+
+      if (isWaterActivity) {
+        if (temp < 18) s -= 30;
+        if (temp < 12) s -= 20; // cumulative: -50 on top of generic outdoor
+        if (rain) s -= 15;
+        if (highWind) s -= 20;
+      }
+
+      if (isExposedActivity && !p.is_indoor) {
+        if (temp < 8) s -= 15;
+        if (temp < 5) s -= 10; // cumulative: -25 on top of generic outdoor
+        if (rain) s -= 10;
+      }
+
+      // ── Trail/walk rescue ──
+      // Walking trails are viable in cold-but-dry weather with warm clothes.
+      // Undo some of the harsh outdoor penalties for trails specifically.
+      const isTrailWalk = TRAIL_WALK_RE.test(nameLower);
+
+      if (isTrailWalk && !rain) {
+        if (temp >= 0 && temp < 12) s += 25; // partially undo cold outdoor penalty
+        if (temp >= 0 && temp < 5) s += 10; // extra rescue for very cold
+      }
+      if (isTrailWalk && rain) {
+        s -= 10; // wet trails are worse than other outdoor options
+      }
 
       // ── Weekend boost ──
       if (
@@ -713,7 +790,6 @@ function selectPlaces(
   // ── Morning ──
   const morning: Scored[] = [];
   if (rain || isCold) {
-    // Rain or cold: indoor first
     morning.push(
       ...pickFor("morning", INDOOR_CATS, { indoor: true, maxKm: 20 }),
     );
@@ -916,11 +992,12 @@ function buildPrompt(
         "Freezing. Only warm indoor activities. Quick bundled-up walks at most.";
     else if (!isRaining && t < 5)
       wh =
-        "Very cold. Prioritize indoor activities. Brief outdoor walks OK if bundled up.";
+        "Very cold but dry. Mostly indoor activities. A short bundled-up walk or trail is OK.";
     else if (!isRaining && t < 10)
-      wh = "Cold but dry. Short walks ok, no swimming or long outdoor stays.";
+      wh =
+        "Cold but dry. Short walks and trails OK with warm clothes, no swimming or long outdoor stays.";
     else if (!isRaining && t >= 10 && t <= 18)
-      wh = "Mild weather, good for sightseeing.";
+      wh = "Mild weather, good for sightseeing and walks.";
   }
 
   const season = day.season.charAt(0).toUpperCase() + day.season.slice(1);
@@ -931,7 +1008,7 @@ function buildPrompt(
 
   const coldWarning =
     weather && weather.temp < 8
-      ? `\nIMPORTANT: It is only ${weather.temp}°C. Strongly prefer indoor activities. If you must suggest outdoor activities, explicitly mention dressing warm and keep them short.`
+      ? `\nIMPORTANT: It is only ${weather.temp}°C. Strongly prefer indoor activities. Walking trails are OK if you mention dressing warm. Do NOT suggest water sports, swimming outdoors, or beach activities.`
       : "";
 
   return `Write a day plan for camping guests at "${safeCampName}".
@@ -1956,6 +2033,9 @@ export async function prefetchAiPlan(
   places: CachedPlace[],
   distanceMap?: Record<string, string>,
 ): Promise<void> {
+  // Clean up yesterday's rows (once per day, non-blocking)
+  maybeCleanupStaleCache().catch(() => {});
+
   const rain = weather?.isRaining ?? false;
   const temp = weather?.temp ?? 18;
   const wind = weather?.windSpeed ?? 0;
@@ -2068,18 +2148,5 @@ export async function prefetchAiPlan(
     await work;
   } finally {
     inflightPrefetches.delete(prefetchKey);
-  }
-}
-
-// ─── Cleanup ────────────────────────────────────────────
-
-export async function cleanupStaleCache(): Promise<void> {
-  try {
-    const supabase = await createClient();
-    const today = todayStr();
-    await supabase.from("plan_cache").delete().neq("date_str", today);
-    console.log("[AI Planner] Cleaned up stale cache rows");
-  } catch (e) {
-    console.warn("[AI Planner] Cleanup error:", e);
   }
 }
