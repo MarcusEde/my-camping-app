@@ -33,15 +33,6 @@ export async function requireSuperAdmin() {
   return user;
 }
 
-export async function isSuperAdmin(): Promise<boolean> {
-  try {
-    await requireSuperAdmin();
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 // ─── Campground Owner (scoped tenant access) ──────────────────────────────
 
 export async function requireOwner(campgroundId: string) {

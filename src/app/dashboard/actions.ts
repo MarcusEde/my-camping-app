@@ -73,7 +73,18 @@ const PartnerSchema = z.object({
   ),
   coupon_code: z.string().max(50).nullable().optional(), // ← ADD THIS
 });
+const FacilitySchema = z.object({
+  name: z.string().min(1, "Namn krävs").max(100, "Max 100 tecken"),
+  type: z.string().min(1, "Typ krävs").max(50),
+  walking_minutes: z.number().int().min(0).max(30),
+  is_active: z.boolean(),
+});
 
+const UpdatePlaceDetailsSchema = z.object({
+  is_on_site: z.boolean().optional(),
+  is_indoor: z.boolean().optional(),
+  custom_hours: z.string().max(255, "Max 255 tecken").nullable().optional(),
+});
 /**
  * 🔐 SECURITY HELPER
  */
@@ -494,12 +505,17 @@ export async function addCustomPlace(
 
 export async function updatePlaceDetails(
   placeId: string,
-  data: {
+  rawData: {
     is_on_site?: boolean;
     is_indoor?: boolean;
     custom_hours?: string | null;
   },
 ) {
+  // SEC-002 FIX: Implement strict Zod validation
+  const validated = UpdatePlaceDetailsSchema.safeParse(rawData);
+  if (!validated.success) throw new Error(validated.error.issues[0].message);
+
+  const data = validated.data;
   const supabase = await createClient();
   const { data: place } = await supabase
     .from("cached_places")
@@ -705,26 +721,27 @@ export async function trackPartnerClick(partnerId: string) {
 
 export async function saveFacility(
   campgroundId: string,
-  data: {
+  rawData: {
     name: string;
     type: string;
     walking_minutes: number;
     is_active: boolean;
   },
 ) {
-  const { supabase, camp } = await verifyOwnership(campgroundId);
+  // SEC-002 FIX: Implement strict Zod validation
+  const validated = FacilitySchema.safeParse(rawData);
+  if (!validated.success) throw new Error(validated.error.issues[0].message);
 
-  const name = data.name.trim();
-  if (!name) throw new Error("Namn krävs.");
-  if (name.length > 100) throw new Error("Max 100 tecken.");
+  const data = validated.data;
+  const { supabase, camp } = await verifyOwnership(campgroundId);
 
   const { data: inserted, error } = await supabase
     .from("internal_locations")
     .insert({
       campground_id: campgroundId,
-      name,
+      name: data.name,
       type: data.type,
-      walking_minutes: Math.max(0, Math.min(30, data.walking_minutes)),
+      walking_minutes: data.walking_minutes,
       is_active: data.is_active,
     })
     .select("id")

@@ -1,11 +1,48 @@
+// COMPLETE REPLACEMENT — copy this entire block
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+
+// SEC-003 FIX: In-memory rate limiting (works effectively per-isolate in Edge/Workers)
+const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
+const MAX_REQUESTS_PER_WINDOW = 20;
+
+interface RateLimitEntry {
+  count: number;
+  resetAt: number;
+}
+
+// Use globalThis to persist across hot-reloads during dev, and maintain state in edge isolates
+const rateLimits =
+  (globalThis as any).rateLimits || new Map<string, RateLimitEntry>();
+if (!(globalThis as any).rateLimits) {
+  (globalThis as any).rateLimits = rateLimits;
+}
+
+async function isRateLimited(action: string): Promise<boolean> {
+  const ip = (await headers()).get("x-forwarded-for") || "unknown";
+  const key = `${action}_${ip}`;
+  const now = Date.now();
+
+  const record = rateLimits.get(key);
+  if (record && now < record.resetAt) {
+    if (record.count >= MAX_REQUESTS_PER_WINDOW) return true;
+    record.count++;
+    return false;
+  }
+
+  rateLimits.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW });
+  return false;
+}
 
 /* ── Partner Click Tracking ────────────────────────────── */
 
 export async function trackPartnerClick(partnerId: string) {
+  if (await isRateLimited("click")) {
+    return { success: false, error: "Too many requests" };
+  }
+
   const cookieStore = await cookies();
   const clickKey = `partner_click_${partnerId}`;
 
@@ -31,6 +68,10 @@ export async function trackPartnerClick(partnerId: string) {
 /* ── Coupon Redemption Tracking ────────────────────────── */
 
 export async function trackRedemption(partnerId: string, campgroundId: string) {
+  if (await isRateLimited("redemption")) {
+    return { success: false, error: "Too many requests" };
+  }
+
   const cookieStore = await cookies();
   const redeemKey = `redemption_${partnerId}`;
 

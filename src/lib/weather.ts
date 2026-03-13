@@ -145,12 +145,6 @@ export async function fetchWeather(
   return fetchWeatherFromOpenMeteo(lat, lng);
 }
 
-/**
- * @deprecated Use `fetchWeather` instead.
- * Kept for backwards compatibility.
- */
-export const getCurrentWeather = fetchWeather;
-
 // ── SMHI symbol parser ────────────────────────────────────
 
 function parseSmhiSymbol(code: number): {
