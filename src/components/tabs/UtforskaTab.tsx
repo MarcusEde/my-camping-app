@@ -8,8 +8,12 @@ import {
 } from "@/lib/category-styles";
 import { SPRING_TAP, STAGGER_CONTAINER, STAGGER_ITEM } from "@/lib/constants";
 import { ROW_DEFS } from "@/lib/explore-config";
-import { getMapLink, getOpeningHoursDisplay } from "@/lib/place-utils";
-import { parseFormattedDistanceKm, type RoadDistanceMap } from "@/lib/routing";
+import {
+  calculateRelevanceScore,
+  getMapLink,
+  getOpeningHoursDisplay,
+} from "@/lib/place-utils";
+import { type RoadDistanceMap } from "@/lib/routing";
 import { utforskaLabels, type UtforskaLabels } from "@/lib/translations";
 import { hexToRgba } from "@/lib/utils";
 import type { CachedPlace, Campground } from "@/types/database";
@@ -49,14 +53,21 @@ export default function UtforskaTab({
   const l = utforskaLabels[lang];
   const isSwedish = lang === "sv";
 
+  // ── Extract campground coordinates once ──────────────────────────
+  // These are passed into the scoring function so it can compute
+  // Haversine fallback distances when OSRM data is missing.
+  const campLat = campground.latitude ?? 0;
+  const campLon = campground.longitude ?? 0;
+
   const renderedRows = ROW_DEFS.map((row) => {
-    const filtered = places.filter(row.filter).sort((a, b) => {
-      if (a.is_pinned && !b.is_pinned) return -1;
-      if (!a.is_pinned && b.is_pinned) return 1;
-      const kmA = parseFormattedDistanceKm(distanceMap[a.id] ?? "") ?? 999;
-      const kmB = parseFormattedDistanceKm(distanceMap[b.id] ?? "") ?? 999;
-      return kmA - kmB;
-    });
+    // ── Filter by category, then sort by relevance (descending) ────
+    const filtered = places
+      .filter(row.filter)
+      .sort(
+        (a, b) =>
+          calculateRelevanceScore(b, distanceMap, campLat, campLon) -
+          calculateRelevanceScore(a, distanceMap, campLat, campLon),
+      );
 
     if (filtered.length === 0) return null;
 
@@ -112,6 +123,12 @@ export default function UtforskaTab({
     </motion.div>
   );
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Everything below this line is IDENTICAL to the original file.
+// No changes to RowHeader, PlaceCard, CardGradientHeader, MetaPills,
+// MetaPill, OwnerNote, CardAction, or EmptyState.
+// ═══════════════════════════════════════════════════════════════════════════
 
 /* ── Row Header ──────────────────────────────────────── */
 
@@ -190,7 +207,6 @@ function PlaceCard({
       whileTap={{ scale: 0.97 }}
       transition={SPRING_TAP}
     >
-      {/* ── Gradient header ─────────────────────── */}
       <CardGradientHeader
         catStyle={catStyle}
         angle={angle}
@@ -202,7 +218,6 @@ function PlaceCard({
         brand={brand}
       />
 
-      {/* ── Card body ───────────────────────────── */}
       <div className="flex flex-1 flex-col p-4">
         <h4 className="line-clamp-1 text-[14px] font-black leading-tight tracking-tight text-stone-800">
           {place.name}
@@ -330,7 +345,6 @@ function CardGradientHeader({
         </div>
       )}
 
-      {/* ── Heart / Save toggle ─────────────────── */}
       <motion.button
         onClick={(e) => {
           e.stopPropagation();

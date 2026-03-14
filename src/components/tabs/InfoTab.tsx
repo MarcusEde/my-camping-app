@@ -9,9 +9,10 @@ import {
 } from "@/lib/constants";
 import { useClipboard } from "@/lib/hooks/useClipboard";
 import { useInfoTab } from "@/lib/hooks/useInfoTab";
+import { trackInfoClick } from "@/lib/tracking";
 import { infoLabels, type InfoLabels } from "@/lib/translations";
 import { hexToRgba } from "@/lib/utils";
-import type { Campground } from "@/types/database";
+import type { Campground, InfoType } from "@/types/database";
 import type { Lang } from "@/types/guest";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -28,14 +29,15 @@ import {
   Trash2,
   Wifi,
 } from "lucide-react";
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 
 interface Props {
   campground: Campground;
   lang: Lang;
+  sessionId: string; // ← NEW: passed from GuestAppUI
 }
 
-export default function InfoTab({ campground, lang }: Props) {
+export default function InfoTab({ campground, lang, sessionId }: Props) {
   const brand = campground.primary_color || "#2A3C34";
   const l = infoLabels[lang];
   const isSwedish = lang === "sv";
@@ -59,6 +61,17 @@ export default function InfoTab({ campground, lang }: Props) {
   const copyPw = () => {
     if (campground.wifi_password) copy(campground.wifi_password);
   };
+
+  // ── Track Quick Info accordion opens ──────────────────────
+  // Only fires when OPENING (not closing). Each open = one
+  // "question the guest answered themselves instead of asking
+  // at reception".
+  const handleInfoOpen = useCallback(
+    (infoType: InfoType) => {
+      trackInfoClick(campground.id, sessionId, infoType);
+    },
+    [campground.id, sessionId],
+  );
 
   return (
     <motion.div
@@ -98,6 +111,7 @@ export default function InfoTab({ campground, lang }: Props) {
         brand={brand}
         labels={l}
         isSwedish={isSwedish}
+        onInfoOpen={handleInfoOpen} // ← NEW
       />
 
       {receptionMapLink && (
@@ -381,6 +395,7 @@ function PracticalSection({
   brand,
   labels: l,
   isSwedish,
+  onInfoOpen,
 }: {
   checkOutInfo: string;
   trashRules: string;
@@ -390,6 +405,7 @@ function PracticalSection({
   brand: string;
   labels: InfoLabels;
   isSwedish: boolean;
+  onInfoOpen: (infoType: InfoType) => void; // ← NEW
 }) {
   return (
     <motion.section variants={STAGGER_ITEM}>
@@ -408,6 +424,7 @@ function PracticalSection({
             isOwnerContent
             originalLangLabel={l.originalLang}
             isSwedish={isSwedish}
+            onOpen={() => onInfoOpen("checkout")} // ← NEW
           />
         )}
         {trashRules && (
@@ -419,6 +436,7 @@ function PracticalSection({
             isOwnerContent
             originalLangLabel={l.originalLang}
             isSwedish={isSwedish}
+            onOpen={() => onInfoOpen("trash")} // ← NEW
           />
         )}
         {emergencyInfo && (
@@ -431,6 +449,7 @@ function PracticalSection({
             originalLangLabel={l.originalLang}
             isSwedish={isSwedish}
             urgent
+            onOpen={() => onInfoOpen("emergency")} // ← NEW
           />
         )}
         <CollapsibleInfo
@@ -441,6 +460,7 @@ function PracticalSection({
           isOwnerContent={hasCampRules}
           originalLangLabel={l.originalLang}
           isSwedish={isSwedish}
+          // No onOpen — "Camp Rules" is not a reception question
         />
       </div>
     </motion.section>
@@ -516,6 +536,7 @@ function CollapsibleInfo({
   originalLangLabel,
   isSwedish,
   urgent,
+  onOpen,
 }: {
   icon: React.ReactNode;
   label: string;
@@ -525,6 +546,7 @@ function CollapsibleInfo({
   originalLangLabel: string;
   isSwedish: boolean;
   urgent?: boolean;
+  onOpen?: () => void; // ← NEW: only fires on expand, not collapse
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -535,7 +557,14 @@ function CollapsibleInfo({
       transition={SPRING_SOFT}
     >
       <motion.button
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => {
+          const willOpen = !expanded;
+          setExpanded(willOpen);
+          // Only track when OPENING — closing is not a "question answered"
+          if (willOpen) {
+            onOpen?.();
+          }
+        }}
         className="flex w-full items-center gap-3.5 px-4 py-3.5 text-left"
         whileTap={{ scale: 0.97 }}
         transition={SPRING_TAP}

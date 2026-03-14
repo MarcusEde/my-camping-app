@@ -14,6 +14,7 @@ import {
   MessageCircle,
   Plus,
   Search,
+  Settings2,
   Star,
   Trash2,
   Umbrella,
@@ -73,55 +74,41 @@ export default function PlacesManager({ campground, places }: Props) {
   const s = usePlacesManager({ campground, places });
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/* ━━━ TOP BAR: Search + Actions ━━━ */}
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative flex-1">
           <Search
-            size={14}
+            size={16}
             strokeWidth={2}
-            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-300"
+            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400"
           />
           <input
             type="text"
             value={s.search}
             onChange={(e) => s.setSearch(e.target.value)}
             placeholder="Sök platser..."
-            className="w-full rounded-[10px] bg-stone-50/80 py-2.5 pl-10 pr-4 text-[12px] font-medium text-stone-700 ring-1 ring-stone-200/60 placeholder:text-stone-300 focus:outline-none focus:ring-2"
-            style={
-              {
-                "--tw-ring-color": hexToRgba(s.brand, 0.25),
-              } as React.CSSProperties
-            }
+            className="w-full rounded-lg border-0 bg-white py-2.5 pl-10 pr-4 text-sm text-stone-800 shadow-sm ring-1 ring-stone-200 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
           />
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={s.toggleShowHidden}
-            className="flex items-center gap-1.5 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-all active:scale-95"
-            style={
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2.5 text-xs font-semibold transition-all active:scale-[0.98] ${
               s.showHidden
-                ? { backgroundColor: hexToRgba(s.brand, 0.08), color: s.brand }
-                : {
-                    backgroundColor: "transparent",
-                    color: "#a8a29e",
-                    boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.06)",
-                  }
-            }
+                ? "bg-stone-800 text-white shadow-sm"
+                : "bg-white text-stone-500 shadow-sm ring-1 ring-stone-200 hover:bg-stone-50"
+            }`}
           >
-            {s.showHidden ? <Eye size={11} /> : <EyeOff size={11} />}
+            {s.showHidden ? <Eye size={14} /> : <EyeOff size={14} />}
             Dolda
           </button>
           <button
             onClick={s.toggleShowAddForm}
-            className="flex items-center gap-1.5 rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.1em] text-white transition-all active:scale-95"
-            style={{
-              backgroundColor: s.brand,
-              boxShadow: `0 2px 8px ${hexToRgba(s.brand, 0.18)}`,
-            }}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition-all hover:bg-emerald-700 hover:shadow-md active:scale-[0.98]"
           >
-            <Plus size={12} strokeWidth={2.5} />
+            <Plus size={14} strokeWidth={2.5} />
             Ny plats
           </button>
         </div>
@@ -176,7 +163,7 @@ export default function PlacesManager({ campground, places }: Props) {
           />
 
           {s.filtered.length > 0 ? (
-            <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-2">
               {s.filtered.map((place) => (
                 <PlaceCard
                   key={place.id}
@@ -238,14 +225,7 @@ function MobileCategoryPills({
 }) {
   return (
     <div className="lg:hidden">
-      <div
-        className="flex gap-1 overflow-x-auto pb-1"
-        style={{
-          WebkitOverflowScrolling: "touch",
-          scrollbarWidth: "none",
-          msOverflowStyle: "none",
-        }}
-      >
+      <div className="scrollbar-hide flex gap-1.5 overflow-x-auto pb-1">
         {availableCats.map((cat) => {
           const meta =
             cat === "all" ? { emoji: "🗺️", label: "Alla" } : CATEGORY_META[cat];
@@ -255,23 +235,21 @@ function MobileCategoryPills({
             <button
               key={cat}
               onClick={() => onSelect(cat)}
-              className="flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.15em] transition-all active:scale-95"
-              style={
+              className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all active:scale-[0.97] ${
                 isActive
-                  ? { backgroundColor: brand, color: "#fff" }
-                  : {
-                      backgroundColor: "transparent",
-                      color: "#a8a29e",
-                      boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.06)",
-                    }
-              }
+                  ? "bg-emerald-600 text-white shadow-sm"
+                  : "bg-white text-stone-500 ring-1 ring-stone-200 hover:bg-stone-50"
+              }`}
             >
-              <span className="text-xs">{meta.emoji}</span>
+              <span className="text-sm">{meta.emoji}</span>
               {meta.label}
               {count > 0 && (
                 <span
-                  className="ml-0.5 text-[8px]"
-                  style={{ opacity: isActive ? 0.7 : 0.5 }}
+                  className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                    isActive
+                      ? "bg-white/20 text-white"
+                      : "bg-stone-100 text-stone-400"
+                  }`}
                 >
                   {count}
                 </span>
@@ -299,8 +277,8 @@ function DesktopSidebar({
   onSelect: (cat: PlaceCategory | "all") => void;
 }) {
   return (
-    <aside className="hidden w-56 shrink-0 lg:block">
-      <div className="sticky top-4 space-y-1">
+    <aside className="hidden w-52 shrink-0 lg:block">
+      <div className="sticky top-4 rounded-xl bg-white p-2 shadow-sm ring-1 ring-stone-200">
         <SidebarButton
           emoji="🗺️"
           label="Alla platser"
@@ -310,8 +288,6 @@ function DesktopSidebar({
           onClick={() => onSelect("all")}
         />
 
-        <div className="my-2 h-px bg-stone-100" />
-
         {CATEGORY_GROUPS.map((group) => {
           const groupCats = group.categories.filter(
             (c) => (categoryCounts[c] ?? 0) > 0,
@@ -319,8 +295,9 @@ function DesktopSidebar({
           if (groupCats.length === 0) return null;
 
           return (
-            <div key={group.label} className="pb-2">
-              <p className="mb-1 px-2 pt-2 text-[9px] font-black uppercase tracking-[0.2em] text-stone-300">
+            <div key={group.label}>
+              <div className="mx-2 my-1.5 border-t border-stone-100" />
+              <p className="mb-1 px-3 pt-1 text-[10px] font-bold uppercase tracking-wider text-stone-400">
                 {group.label}
               </p>
               {groupCats.map((cat) => (
@@ -355,11 +332,11 @@ function FilterStatus({
   onClear: () => void;
 }) {
   return (
-    <div className="mb-2 flex items-center justify-between px-1">
-      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-300">
+    <div className="mb-3 flex items-center justify-between">
+      <p className="text-xs font-semibold text-stone-500">
         {count} {count === 1 ? "plats" : "platser"}
         {filterCat !== "all" && (
-          <span className="ml-1.5 normal-case tracking-normal">
+          <span className="ml-1 text-stone-400">
             i {CATEGORY_META[filterCat]?.label?.toLowerCase() ?? filterCat}
           </span>
         )}
@@ -367,9 +344,9 @@ function FilterStatus({
       {filterCat !== "all" && (
         <button
           onClick={onClear}
-          className="flex items-center gap-1 text-[10px] font-bold text-stone-400 transition-colors hover:text-stone-600"
+          className="inline-flex items-center gap-1 text-xs font-semibold text-stone-400 transition-colors hover:text-stone-700"
         >
-          <X size={10} />
+          <X size={12} />
           Rensa filter
         </button>
       )}
@@ -382,16 +359,16 @@ function FilterStatus({
    ═══════════════════════════════════════════════════════ */
 function EmptyState({ hasSearch }: { hasSearch: boolean }) {
   return (
-    <div className="rounded-[20px] bg-white px-6 py-8 text-center ring-1 ring-stone-200/60">
-      <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-stone-50 ring-1 ring-stone-200/60">
-        <MapPin size={18} strokeWidth={1.5} className="text-stone-300" />
+    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-stone-200 bg-stone-50/50 px-6 py-14">
+      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-stone-100">
+        <MapPin size={20} className="text-stone-400" />
       </div>
-      <p className="text-[13px] font-black tracking-tight text-stone-700">
-        {hasSearch ? "Inga träffar" : "Inga platser"}
+      <p className="text-sm font-semibold text-stone-700">
+        {hasSearch ? "Inga träffar" : "Inga platser tillagda"}
       </p>
-      <p className="mx-auto mt-1 max-w-[200px] text-[11px] leading-relaxed text-stone-400">
+      <p className="mt-1 max-w-[240px] text-center text-xs leading-relaxed text-stone-500">
         {hasSearch
-          ? "Prova ett annat sökord."
+          ? "Prova ett annat sökord eller rensa filtret."
           : 'Klicka på "Ny plats" för att lägga till din första!'}
       </p>
     </div>
@@ -419,27 +396,26 @@ function SidebarButton({
   return (
     <button
       onClick={onClick}
-      className="flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left transition-all active:scale-[0.98]"
-      style={
+      className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-all active:scale-[0.98] ${
         isActive
-          ? { backgroundColor: hexToRgba(brand, 0.07), color: brand }
-          : { backgroundColor: "transparent", color: "#78716c" }
-      }
+          ? "bg-emerald-50 text-emerald-700"
+          : "text-stone-600 hover:bg-stone-50"
+      }`}
     >
       <span className="text-sm">{emoji}</span>
       <span
-        className="flex-1 text-[11px] font-bold"
-        style={isActive ? { color: brand } : undefined}
+        className={`flex-1 text-xs font-semibold ${
+          isActive ? "text-emerald-700" : "text-stone-600"
+        }`}
       >
         {label}
       </span>
       <span
-        className="min-w-[20px] rounded-full px-1.5 py-0.5 text-center text-[9px] font-black"
-        style={
+        className={`min-w-[22px] rounded-md px-1.5 py-0.5 text-center text-[10px] font-bold ${
           isActive
-            ? { backgroundColor: hexToRgba(brand, 0.12), color: brand }
-            : { backgroundColor: "#f5f5f4", color: "#a8a29e" }
-        }
+            ? "bg-emerald-100 text-emerald-600"
+            : "bg-stone-100 text-stone-400"
+        }`}
       >
         {count}
       </span>
@@ -455,14 +431,12 @@ interface PlaceCardProps {
   brand: string;
   isBusy: boolean;
   isPending: boolean;
-  // Note editing
   isEditingNote: boolean;
   noteText: string;
   onNoteTextChange: (v: string) => void;
   onToggleNoteEdit: () => void;
   onCancelNoteEdit: () => void;
   onSaveNote: () => void;
-  // Details editing
   isEditingDetails: boolean;
   isEditDetailsValid: boolean;
   editIsOnSite: boolean;
@@ -474,7 +448,6 @@ interface PlaceCardProps {
   onToggleDetailsEdit: () => void;
   onCancelDetailsEdit: () => void;
   onSaveDetails: () => void;
-  // Actions
   onTogglePin: () => void;
   onToggleHide: () => void;
   onDelete: () => void;
@@ -511,178 +484,193 @@ function PlaceCard({
 
   return (
     <div
-      className={`rounded-[14px] p-3.5 ring-1 ring-stone-200/60 transition-all ${
-        place.is_hidden ? "bg-stone-50/60 opacity-50" : "bg-white"
-      } ${isBusy ? "opacity-40" : ""}`}
-      style={
-        place.is_pinned
-          ? { boxShadow: `inset 0 0 0 1px ${hexToRgba(brand, 0.1)}` }
-          : undefined
-      }
+      className={`group rounded-xl ring-1 transition-all ${
+        place.is_hidden
+          ? "bg-stone-50/60 opacity-60 ring-stone-200/60"
+          : place.is_pinned
+            ? "bg-white ring-emerald-200 shadow-sm"
+            : "bg-white ring-stone-200 hover:shadow-sm"
+      } ${isBusy ? "pointer-events-none opacity-40" : ""}`}
     >
-      <div className="flex items-start gap-3">
-        {/* Emoji badge */}
-        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-stone-50 text-sm ring-1 ring-stone-200/60">
-          {meta.emoji}
-        </div>
+      <div className="p-4">
+        <div className="flex items-start gap-3.5">
+          {/* Emoji badge */}
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-stone-50 text-lg ring-1 ring-stone-100">
+            {meta.emoji}
+          </div>
 
-        {/* Content */}
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <h4 className="truncate text-[12px] font-bold text-stone-800">
-              {place.name}
-            </h4>
-            {place.is_pinned && (
-              <StatusBadge
-                label="⭐ Pinnad"
-                bgColor={hexToRgba(brand, 0.06)}
-                textColor={brand}
-              />
-            )}
-            {place.is_hidden && (
-              <StatusBadge
-                label="Dold"
-                bgColor="rgba(168,162,158,0.08)"
-                textColor="#78716c"
-              />
-            )}
-            {!place.google_place_id && (
-              <StatusBadge
-                label="Egen"
-                bgColor={hexToRgba(brand, 0.06)}
-                textColor={brand}
-              />
-            )}
-            {place.is_on_site && (
-              <StatusBadge
-                label="På området"
-                bgColor="rgba(16,185,129,0.08)"
-                textColor="#059669"
-              />
-            )}
-            {place.is_indoor && (
-              <StatusBadge
-                label="Inomhus"
-                bgColor="rgba(99,102,241,0.08)"
-                textColor="#4f46e5"
-              />
+          {/* Content */}
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <h4 className="truncate text-sm font-semibold text-stone-800">
+                {place.name}
+              </h4>
+              {place.is_pinned && (
+                <StatusBadge
+                  icon={<Star size={8} fill="currentColor" />}
+                  label="Rekommenderad"
+                  variant="emerald"
+                />
+              )}
+              {place.is_hidden && <StatusBadge label="Dold" variant="stone" />}
+              {!place.google_place_id && (
+                <StatusBadge label="Egen plats" variant="brand" brand={brand} />
+              )}
+            </div>
+
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+              {place.address && (
+                <p className="flex items-center gap-1 text-xs text-stone-500">
+                  <MapPin size={10} className="shrink-0 text-stone-400" />
+                  <span className="truncate">{place.address}</span>
+                </p>
+              )}
+              {place.is_on_site && (
+                <p className="flex items-center gap-1 text-xs text-emerald-600">
+                  <Home size={10} className="shrink-0" />
+                  På området
+                </p>
+              )}
+              {place.is_indoor && (
+                <p className="flex items-center gap-1 text-xs text-indigo-500">
+                  <Umbrella size={10} className="shrink-0" />
+                  Inomhus
+                </p>
+              )}
+              {place.custom_hours && (
+                <p className="flex items-center gap-1 text-xs text-stone-500">
+                  <Clock size={10} className="shrink-0 text-stone-400" />
+                  {place.custom_hours}
+                </p>
+              )}
+            </div>
+
+            {place.owner_note && !isEditingNote && (
+              <p className="mt-1.5 text-xs italic leading-relaxed text-stone-400">
+                &ldquo;{place.owner_note}&rdquo;
+              </p>
             )}
           </div>
 
-          {place.address && (
-            <p className="mt-0.5 flex items-center gap-1 text-[10px] text-stone-400">
-              <MapPin size={9} className="shrink-0" />
-              <span className="truncate">{place.address}</span>
-            </p>
-          )}
-
-          {place.custom_hours && (
-            <p className="mt-0.5 flex items-center gap-1 text-[10px] text-stone-400">
-              <Clock size={9} className="shrink-0" />
-              <span>{place.custom_hours}</span>
-            </p>
-          )}
-
-          {place.owner_note && !isEditingNote && (
-            <p className="mt-1 text-[10px] font-medium italic text-stone-400">
-              &ldquo;{place.owner_note}&rdquo;
-            </p>
-          )}
-        </div>
-
-        {/* Action buttons */}
-        <div className="flex shrink-0 items-center gap-0.5">
-          <PlaceAction
-            title={place.is_pinned ? "Ta bort rekommendation" : "Rekommendera"}
-            isActive={place.is_pinned}
-            activeBg={hexToRgba(brand, 0.08)}
-            activeColor={brand}
-            onClick={onTogglePin}
-            disabled={isBusy}
-          >
-            <Star size={13} fill={place.is_pinned ? "currentColor" : "none"} />
-          </PlaceAction>
-
-          <PlaceAction
-            title={place.is_hidden ? "Visa för gäster" : "Dölj för gäster"}
-            isActive={place.is_hidden}
-            activeBg="rgba(168,162,158,0.08)"
-            activeColor="#78716c"
-            onClick={onToggleHide}
-            disabled={isBusy}
-          >
-            {place.is_hidden ? <Eye size={13} /> : <EyeOff size={13} />}
-          </PlaceAction>
-
-          <PlaceAction
-            title="Skriv tips till gästerna"
-            isActive={isEditingNote}
-            activeBg={hexToRgba(brand, 0.08)}
-            activeColor={brand}
-            onClick={onToggleNoteEdit}
-          >
-            <MessageCircle size={13} />
-          </PlaceAction>
-
-          <PlaceAction
-            title="Öppettider & plats"
-            isActive={isEditingDetails}
-            activeBg={hexToRgba(brand, 0.08)}
-            activeColor={brand}
-            onClick={onToggleDetailsEdit}
-          >
-            <Clock size={13} />
-          </PlaceAction>
-
-          {!place.google_place_id && (
+          {/* Action buttons */}
+          <div className="flex shrink-0 items-center gap-0.5">
             <PlaceAction
-              title="Ta bort"
-              onClick={onDelete}
+              title={
+                place.is_pinned ? "Ta bort rekommendation" : "Rekommendera"
+              }
+              isActive={place.is_pinned}
+              onClick={onTogglePin}
               disabled={isBusy}
-              dangerHover
             >
-              <Trash2 size={13} />
+              <Star
+                size={14}
+                fill={place.is_pinned ? "currentColor" : "none"}
+                className={
+                  place.is_pinned
+                    ? "text-emerald-500"
+                    : "text-stone-300 group-hover/action:text-amber-500"
+                }
+              />
             </PlaceAction>
-          )}
+
+            <PlaceAction
+              title={place.is_hidden ? "Visa för gäster" : "Dölj för gäster"}
+              isActive={place.is_hidden}
+              onClick={onToggleHide}
+              disabled={isBusy}
+            >
+              {place.is_hidden ? (
+                <Eye size={14} className="text-stone-500" />
+              ) : (
+                <EyeOff
+                  size={14}
+                  className="text-stone-300 group-hover/action:text-stone-500"
+                />
+              )}
+            </PlaceAction>
+
+            <PlaceAction
+              title="Skriv tips till gästerna"
+              isActive={isEditingNote}
+              onClick={onToggleNoteEdit}
+            >
+              <MessageCircle
+                size={14}
+                className={
+                  isEditingNote
+                    ? "text-emerald-500"
+                    : "text-stone-300 group-hover/action:text-stone-500"
+                }
+              />
+            </PlaceAction>
+
+            <PlaceAction
+              title="Öppettider & plats"
+              isActive={isEditingDetails}
+              onClick={onToggleDetailsEdit}
+            >
+              <Settings2
+                size={14}
+                className={
+                  isEditingDetails
+                    ? "text-emerald-500"
+                    : "text-stone-300 group-hover/action:text-stone-500"
+                }
+              />
+            </PlaceAction>
+
+            {!place.google_place_id && (
+              <PlaceAction
+                title="Ta bort"
+                onClick={onDelete}
+                disabled={isBusy}
+                dangerHover
+              >
+                <Trash2 size={14} />
+              </PlaceAction>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Note editor */}
       {isEditingNote && (
-        <div className="mt-2.5 flex gap-1.5 pl-11">
-          <input
-            type="text"
-            value={noteText}
-            onChange={(e) => onNoteTextChange(e.target.value)}
-            placeholder="Skriv ett tips till gästerna..."
-            autoFocus
-            className="flex-1 rounded-[8px] bg-white px-3 py-2 text-[11px] font-medium text-stone-700 ring-1 ring-stone-200/60 placeholder:text-stone-300 focus:outline-none focus:ring-2"
-            style={
-              {
-                "--tw-ring-color": hexToRgba(brand, 0.25),
-              } as React.CSSProperties
-            }
-            onKeyDown={(e) => {
-              if (e.key === "Enter") onSaveNote();
-              if (e.key === "Escape") onCancelNoteEdit();
-            }}
-          />
-          <button
-            onClick={onSaveNote}
-            disabled={isPending}
-            className="flex items-center gap-1 rounded-full px-3.5 py-2 text-[10px] font-black uppercase tracking-[0.1em] text-white transition-all active:scale-95"
-            style={{
-              backgroundColor: brand,
-              boxShadow: `0 2px 8px ${hexToRgba(brand, 0.18)}`,
-            }}
-          >
-            {isBusy ? (
-              <Loader2 size={11} className="animate-spin" />
-            ) : (
-              <Check size={11} strokeWidth={2.5} />
-            )}
-            Spara
-          </button>
+        <div className="border-t border-stone-100 px-4 py-3">
+          <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-stone-400">
+            Tips till gästerna
+          </label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={noteText}
+              onChange={(e) => onNoteTextChange(e.target.value)}
+              placeholder="T.ex. Boka bord i förväg på helger!"
+              autoFocus
+              className="flex-1 rounded-lg border-0 bg-white px-3.5 py-2.5 text-sm text-stone-800 shadow-sm ring-1 ring-stone-200 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") onSaveNote();
+                if (e.key === "Escape") onCancelNoteEdit();
+              }}
+            />
+            <button
+              onClick={onCancelNoteEdit}
+              className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-500 shadow-sm transition-all hover:bg-stone-50 active:scale-[0.98]"
+            >
+              Avbryt
+            </button>
+            <button
+              onClick={onSaveNote}
+              disabled={isPending}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-50"
+            >
+              {isBusy ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <Check size={13} strokeWidth={2.5} />
+              )}
+              Spara
+            </button>
+          </div>
         </div>
       )}
 
@@ -708,7 +696,7 @@ function PlaceCard({
 }
 
 /* ═══════════════════════════════════════════════════════
-   Details Editor (inline in PlaceCard)
+   Details Editor
    ═══════════════════════════════════════════════════════ */
 function DetailsEditor({
   brand,
@@ -738,97 +726,100 @@ function DetailsEditor({
   onSave: () => void;
 }) {
   return (
-    <div className="mt-3 space-y-2.5 rounded-[10px] bg-stone-50/80 p-3 pl-11">
-      <button
-        onClick={onToggleIsOnSite}
-        className="flex w-full items-center gap-3 rounded-[8px] bg-white p-2.5 ring-1 ring-stone-200/60"
-      >
-        <div
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] transition-colors"
-          style={
-            isOnSite
-              ? { backgroundColor: hexToRgba(brand, 0.1), color: brand }
-              : { backgroundColor: "#f5f5f4", color: "#a8a29e" }
-          }
+    <div className="border-t border-stone-100 px-4 py-4">
+      <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-stone-400">
+        Platsinställningar
+      </p>
+
+      <div className="space-y-2.5">
+        {/* On-site toggle */}
+        <button
+          onClick={onToggleIsOnSite}
+          className="flex w-full items-center gap-3 rounded-lg bg-stone-50/80 p-3 ring-1 ring-stone-100 transition-all hover:bg-stone-50"
         >
-          <Home size={12} strokeWidth={2} />
-        </div>
-        <div className="flex-1 text-left">
-          <p className="text-[10px] font-bold text-stone-700">
-            På campingområdet
-          </p>
-        </div>
-        <ToggleSwitch active={isOnSite} brand={brand} />
-      </button>
+          <div
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
+              isOnSite
+                ? "bg-emerald-100 text-emerald-600"
+                : "bg-stone-100 text-stone-400"
+            }`}
+          >
+            <Home size={14} strokeWidth={2} />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-xs font-semibold text-stone-700">
+              På campingområdet
+            </p>
+            <p className="text-[10px] text-stone-400">
+              Gästerna behöver inte köra
+            </p>
+          </div>
+          <ToggleSwitch active={isOnSite} brand={brand} />
+        </button>
 
-      <button
-        onClick={onToggleIsIndoor}
-        className="flex w-full items-center gap-3 rounded-[8px] bg-white p-2.5 ring-1 ring-stone-200/60"
-      >
-        <div
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] transition-colors"
-          style={
-            isIndoor
-              ? { backgroundColor: hexToRgba(brand, 0.1), color: brand }
-              : { backgroundColor: "#f5f5f4", color: "#a8a29e" }
-          }
+        {/* Indoor toggle */}
+        <button
+          onClick={onToggleIsIndoor}
+          className="flex w-full items-center gap-3 rounded-lg bg-stone-50/80 p-3 ring-1 ring-stone-100 transition-all hover:bg-stone-50"
         >
-          <Umbrella size={12} strokeWidth={2} />
-        </div>
-        <div className="flex-1 text-left">
-          <p className="text-[10px] font-bold text-stone-700">
-            Inomhusaktivitet
-          </p>
-          <p className="text-[9px] text-stone-400">
-            Föreslås vid regn av AI-planeraren
-          </p>
-        </div>
-        <ToggleSwitch active={isIndoor} brand={brand} />
-      </button>
+          <div
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
+              isIndoor
+                ? "bg-indigo-100 text-indigo-600"
+                : "bg-stone-100 text-stone-400"
+            }`}
+          >
+            <Umbrella size={14} strokeWidth={2} />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-xs font-semibold text-stone-700">
+              Inomhusaktivitet
+            </p>
+            <p className="text-[10px] text-stone-400">
+              Föreslås vid regn av AI-planeraren
+            </p>
+          </div>
+          <ToggleSwitch active={isIndoor} brand={brand} />
+        </button>
 
-      <div>
-        <label className="mb-1 block text-[9px] font-black uppercase tracking-[0.2em] text-stone-400">
-          Öppettider
-        </label>
-        <input
-          type="text"
-          value={customHours}
-          onChange={(e) => onCustomHoursChange(e.target.value)}
-          placeholder="T.ex. 09:00–18:00"
-          className="w-full rounded-[8px] bg-white px-3 py-2 text-[11px] font-medium text-stone-700 ring-1 ring-stone-200/60 placeholder:text-stone-300 focus:outline-none focus:ring-2"
-          style={
-            { "--tw-ring-color": hexToRgba(brand, 0.25) } as React.CSSProperties
-          }
-        />
-      </div>
+        {/* Custom hours */}
+        <div>
+          <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-stone-400">
+            Öppettider
+          </label>
+          <input
+            type="text"
+            value={customHours}
+            onChange={(e) => onCustomHoursChange(e.target.value)}
+            placeholder="T.ex. 09:00–18:00"
+            className="w-full rounded-lg border-0 bg-white px-3.5 py-2.5 text-sm text-stone-800 shadow-sm ring-1 ring-stone-200 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          />
+        </div>
 
-      <div className="flex flex-col gap-2 pt-1">
+        {/* Validation + Actions */}
         {!isValid && (
-          <p className="text-right text-[9px] font-medium text-red-500">
+          <p className="text-xs font-medium text-red-500">
             Platsen måste ha en adress eller vara &ldquo;På
             campingområdet&rdquo;.
           </p>
         )}
-        <div className="flex justify-end gap-2">
+
+        <div className="flex justify-end gap-2 pt-1">
           <button
             onClick={onCancel}
-            className="rounded-full px-3.5 py-2 text-[10px] font-black uppercase tracking-[0.1em] text-stone-400 transition-colors hover:bg-white hover:text-stone-600"
+            className="rounded-lg border border-stone-200 bg-white px-4 py-2 text-xs font-semibold text-stone-500 shadow-sm transition-all hover:bg-stone-50 active:scale-[0.98]"
           >
             Avbryt
           </button>
           <button
             onClick={onSave}
             disabled={isPending || !isValid}
-            className="flex items-center gap-1 rounded-full px-3.5 py-2 text-[10px] font-black uppercase tracking-[0.1em] text-white transition-all active:scale-95 disabled:opacity-50"
-            style={{
-              backgroundColor: brand,
-              boxShadow: `0 2px 8px ${hexToRgba(brand, 0.18)}`,
-            }}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-emerald-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isBusy ? (
-              <Loader2 size={11} className="animate-spin" />
+              <Loader2 size={13} className="animate-spin" />
             ) : (
-              <Check size={11} strokeWidth={2.5} />
+              <Check size={13} strokeWidth={2.5} />
             )}
             Spara
           </button>
@@ -879,55 +870,59 @@ function AddPlaceForm({
   onClose: () => void;
 }) {
   return (
-    <div
-      className="rounded-[16px] p-4 lg:p-5"
-      style={{ backgroundColor: hexToRgba(brand, 0.03) }}
-    >
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-[12px] font-black tracking-tight text-stone-900">
-          Lägg till egen plats
-        </p>
+    <div className="rounded-xl border border-emerald-100 bg-emerald-50/30 p-5">
+      {/* Header */}
+      <div className="mb-5 flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100">
+            <Plus size={16} className="text-emerald-600" />
+          </div>
+          <p className="text-sm font-bold text-stone-800">
+            Lägg till egen plats
+          </p>
+        </div>
         <button
           onClick={onClose}
-          className="flex h-6 w-6 items-center justify-center rounded-full bg-stone-100 text-stone-400 transition-colors hover:text-stone-600"
+          className="flex h-7 w-7 items-center justify-center rounded-lg text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-600"
         >
-          <X size={12} strokeWidth={2} />
+          <X size={16} />
         </button>
       </div>
 
-      <div className="space-y-2.5 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0">
+      <div className="space-y-4 lg:grid lg:grid-cols-2 lg:gap-5 lg:space-y-0">
         {/* Left column */}
-        <div className="space-y-2.5">
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => onNameChange(e.target.value)}
-            placeholder="Namn, t.ex. Minigolf eller Cykeluthyrning"
-            className="w-full rounded-[10px] bg-white px-3.5 py-2.5 text-[12px] font-medium text-stone-800 ring-1 ring-stone-200/60 placeholder:text-stone-300 focus:outline-none focus:ring-2"
-            style={
-              {
-                "--tw-ring-color": hexToRgba(brand, 0.25),
-              } as React.CSSProperties
-            }
-          />
-          <input
-            type="text"
-            value={address}
-            onChange={(e) => onAddressChange(e.target.value)}
-            placeholder="Adress (krävs om inte på området)"
-            className="w-full rounded-[10px] bg-white px-3.5 py-2.5 text-[12px] font-medium text-stone-800 ring-1 ring-stone-200/60 placeholder:text-stone-300 focus:outline-none focus:ring-2"
-            style={
-              {
-                "--tw-ring-color": hexToRgba(brand, 0.25),
-              } as React.CSSProperties
-            }
-          />
+        <div className="space-y-3">
+          <div>
+            <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-stone-500">
+              Namn
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => onNameChange(e.target.value)}
+              placeholder="T.ex. Minigolf eller Cykeluthyrning"
+              className="w-full rounded-lg border-0 bg-white px-3.5 py-2.5 text-sm text-stone-800 shadow-sm ring-1 ring-stone-200 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
 
           <div>
-            <label className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.2em] text-stone-400">
+            <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-stone-500">
+              Adress
+            </label>
+            <input
+              type="text"
+              value={address}
+              onChange={(e) => onAddressChange(e.target.value)}
+              placeholder="Krävs om inte på området"
+              className="w-full rounded-lg border-0 bg-white px-3.5 py-2.5 text-sm text-stone-800 shadow-sm ring-1 ring-stone-200 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-stone-500">
               Kategori
             </label>
-            <div className="flex flex-wrap gap-1 lg:grid lg:grid-cols-3 lg:gap-1.5">
+            <div className="flex flex-wrap gap-1.5 lg:grid lg:grid-cols-3 lg:gap-1.5">
               {ALL_CATEGORIES.map((cat) => {
                 const m = CATEGORY_META[cat];
                 const isActive = category === cat;
@@ -935,18 +930,13 @@ function AddPlaceForm({
                   <button
                     key={cat}
                     onClick={() => onCategoryChange(cat)}
-                    className="flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.1em] transition-all active:scale-95 lg:rounded-[8px] lg:justify-center"
-                    style={
+                    className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all active:scale-[0.97] lg:justify-center ${
                       isActive
-                        ? { backgroundColor: brand, color: "#fff" }
-                        : {
-                            backgroundColor: "white",
-                            color: "#78716c",
-                            boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.06)",
-                          }
-                    }
+                        ? "bg-emerald-600 text-white shadow-sm"
+                        : "bg-white text-stone-500 ring-1 ring-stone-200 hover:bg-stone-50"
+                    }`}
                   >
-                    <span className="text-xs">{m.emoji}</span>
+                    <span className="text-sm">{m.emoji}</span>
                     {m.label}
                   </button>
                 );
@@ -956,73 +946,64 @@ function AddPlaceForm({
         </div>
 
         {/* Right column */}
-        <div className="space-y-2.5">
-          <div className="rounded-[10px] bg-white p-3 ring-1 ring-stone-200/60">
-            <button
-              onClick={onToggleIsOnSite}
-              className="flex w-full items-center gap-3"
+        <div className="space-y-3">
+          {/* On site */}
+          <button
+            onClick={onToggleIsOnSite}
+            className="flex w-full items-center gap-3 rounded-lg bg-white p-3 shadow-sm ring-1 ring-stone-200 transition-all hover:ring-stone-300"
+          >
+            <div
+              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                isOnSite
+                  ? "bg-emerald-100 text-emerald-600"
+                  : "bg-stone-100 text-stone-400"
+              }`}
             >
-              <div
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] transition-colors"
-                style={
-                  isOnSite
-                    ? { backgroundColor: hexToRgba(brand, 0.1), color: brand }
-                    : { backgroundColor: "#f5f5f4", color: "#a8a29e" }
-                }
-              >
-                <Home size={14} strokeWidth={2} />
-              </div>
-              <div className="flex-1 text-left">
-                <p className="text-[11px] font-bold text-stone-700">
-                  På campingområdet
-                </p>
-                <p className="text-[9px] text-stone-400">
-                  Gäster behöver inte köra
-                </p>
-              </div>
-              <ToggleSwitch active={isOnSite} brand={brand} />
-            </button>
-          </div>
+              <Home size={16} strokeWidth={2} />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="text-xs font-semibold text-stone-700">
+                På campingområdet
+              </p>
+              <p className="text-[10px] text-stone-400">
+                Gästerna behöver inte köra
+              </p>
+            </div>
+            <ToggleSwitch active={isOnSite} brand={brand} />
+          </button>
 
-          <div className="rounded-[10px] bg-white p-3 ring-1 ring-stone-200/60">
-            <button
-              onClick={onToggleIsIndoor}
-              className="flex w-full items-center gap-3"
+          {/* Indoor */}
+          <button
+            onClick={onToggleIsIndoor}
+            className="flex w-full items-center gap-3 rounded-lg bg-white p-3 shadow-sm ring-1 ring-stone-200 transition-all hover:ring-stone-300"
+          >
+            <div
+              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                isIndoor
+                  ? "bg-indigo-100 text-indigo-600"
+                  : "bg-stone-100 text-stone-400"
+              }`}
             >
-              <div
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] transition-colors"
-                style={
-                  isIndoor
-                    ? { backgroundColor: hexToRgba(brand, 0.1), color: brand }
-                    : { backgroundColor: "#f5f5f4", color: "#a8a29e" }
-                }
-              >
-                <Umbrella size={14} strokeWidth={2} />
-              </div>
-              <div className="flex-1 text-left">
-                <p className="text-[11px] font-bold text-stone-700">
-                  Inomhusaktivitet
-                </p>
-                <p className="text-[9px] text-stone-400">
-                  AI-planeraren föreslår vid dåligt väder
-                </p>
-              </div>
-              <ToggleSwitch active={isIndoor} brand={brand} />
-            </button>
-          </div>
+              <Umbrella size={16} strokeWidth={2} />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="text-xs font-semibold text-stone-700">
+                Inomhusaktivitet
+              </p>
+              <p className="text-[10px] text-stone-400">
+                AI-planeraren föreslår vid dåligt väder
+              </p>
+            </div>
+            <ToggleSwitch active={isIndoor} brand={brand} />
+          </button>
 
-          <div className="rounded-[10px] bg-white p-3 ring-1 ring-stone-200/60">
+          {/* Custom hours */}
+          <div className="rounded-lg bg-white p-3 shadow-sm ring-1 ring-stone-200">
             <div className="mb-2 flex items-center gap-2">
-              <div
-                className="flex h-6 w-6 items-center justify-center rounded-[6px]"
-                style={{
-                  backgroundColor: hexToRgba(brand, 0.07),
-                  color: brand,
-                }}
-              >
-                <Clock size={12} strokeWidth={2} />
+              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-amber-100">
+                <Clock size={13} className="text-amber-600" />
               </div>
-              <label className="text-[10px] font-black uppercase tracking-[0.15em] text-stone-500">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-stone-500">
                 Öppettider (valfritt)
               </label>
             </div>
@@ -1031,41 +1012,40 @@ function AddPlaceForm({
               value={customHours}
               onChange={(e) => onCustomHoursChange(e.target.value)}
               placeholder="T.ex. 09:00–18:00 eller Mån–Fre 10–17"
-              className="w-full rounded-[8px] bg-stone-50 px-3 py-2 text-[11px] font-medium text-stone-700 ring-1 ring-stone-100 placeholder:text-stone-300 focus:outline-none focus:ring-2"
-              style={
-                {
-                  "--tw-ring-color": hexToRgba(brand, 0.25),
-                } as React.CSSProperties
-              }
+              className="w-full rounded-lg border-0 bg-stone-50 px-3.5 py-2.5 text-sm text-stone-800 ring-1 ring-stone-100 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>
         </div>
       </div>
 
-      <div className="mt-4 flex flex-col gap-1.5">
-        <button
-          onClick={onAdd}
-          disabled={!isValid || isPending}
-          className="flex w-full items-center justify-center gap-2 rounded-full py-2.5 text-[11px] font-black uppercase tracking-[0.1em] text-white transition-all active:scale-95 disabled:opacity-50 lg:w-auto lg:self-end lg:px-8"
-          style={{
-            backgroundColor: brand,
-            boxShadow: `0 4px 14px ${hexToRgba(brand, 0.18)}`,
-          }}
-        >
-          {isPending ? (
-            <Loader2 size={13} className="animate-spin" />
-          ) : (
-            <Plus size={13} strokeWidth={2.5} />
-          )}
-          Lägg till
-        </button>
-
+      {/* Footer */}
+      <div className="mt-5 flex flex-col items-end gap-2">
         {!isValid && name.trim() !== "" && (
-          <p className="text-center text-[10px] font-medium text-red-500 lg:text-right">
+          <p className="text-xs font-medium text-red-500">
             Platsen måste ha en adress eller vara markerad som &ldquo;På
             campingområdet&rdquo;.
           </p>
         )}
+        <div className="flex gap-2">
+          <button
+            onClick={onClose}
+            className="rounded-lg border border-stone-200 bg-white px-5 py-2.5 text-xs font-semibold text-stone-500 shadow-sm transition-all hover:bg-stone-50 active:scale-[0.98]"
+          >
+            Avbryt
+          </button>
+          <button
+            onClick={onAdd}
+            disabled={!isValid || isPending}
+            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-6 py-2.5 text-xs font-semibold text-white shadow-sm transition-all hover:bg-emerald-700 hover:shadow-md active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isPending ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Plus size={14} strokeWidth={2.5} />
+            )}
+            Lägg till plats
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1078,31 +1058,50 @@ function AddPlaceForm({
 function ToggleSwitch({ active, brand }: { active: boolean; brand: string }) {
   return (
     <div
-      className="h-5 w-9 shrink-0 rounded-full p-0.5 transition-colors"
-      style={{ backgroundColor: active ? brand : "#d6d3d1" }}
+      className={`h-[22px] w-10 shrink-0 rounded-full p-0.5 transition-colors ${
+        active ? "bg-emerald-500" : "bg-stone-300"
+      }`}
     >
       <div
-        className="h-4 w-4 rounded-full bg-white shadow-sm transition-transform"
-        style={{ transform: active ? "translateX(16px)" : "translateX(0)" }}
+        className="h-[18px] w-[18px] rounded-full bg-white shadow-sm transition-transform"
+        style={{ transform: active ? "translateX(18px)" : "translateX(0)" }}
       />
     </div>
   );
 }
 
 function StatusBadge({
+  icon,
   label,
-  bgColor,
-  textColor,
+  variant,
+  brand,
 }: {
+  icon?: React.ReactNode;
   label: string;
-  bgColor: string;
-  textColor: string;
+  variant: "emerald" | "stone" | "brand";
+  brand?: string;
 }) {
+  const styles = {
+    emerald: "bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200/60",
+    stone: "bg-stone-100 text-stone-500 ring-1 ring-stone-200/60",
+    brand: "",
+  };
+
   return (
     <span
-      className="rounded-full px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.15em]"
-      style={{ backgroundColor: bgColor, color: textColor }}
+      className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
+        variant === "brand" ? "ring-1 ring-stone-200/60" : styles[variant]
+      }`}
+      style={
+        variant === "brand" && brand
+          ? {
+              backgroundColor: hexToRgba(brand, 0.06),
+              color: brand,
+            }
+          : undefined
+      }
     >
+      {icon}
       {label}
     </span>
   );
@@ -1112,8 +1111,6 @@ function PlaceAction({
   children,
   title,
   isActive,
-  activeBg,
-  activeColor,
   onClick,
   disabled,
   dangerHover,
@@ -1121,8 +1118,6 @@ function PlaceAction({
   children: React.ReactNode;
   title: string;
   isActive?: boolean;
-  activeBg?: string;
-  activeColor?: string;
   onClick: () => void;
   disabled?: boolean;
   dangerHover?: boolean;
@@ -1132,16 +1127,13 @@ function PlaceAction({
       title={title}
       onClick={onClick}
       disabled={disabled}
-      className={`flex h-7 w-7 items-center justify-center rounded-full transition-all disabled:opacity-40 active:scale-90 ${
-        dangerHover
-          ? "text-stone-300 hover:bg-red-50 hover:text-red-500"
-          : "text-stone-300 hover:bg-stone-50 hover:text-stone-500"
+      className={`group/action flex h-8 w-8 items-center justify-center rounded-lg transition-all disabled:opacity-40 active:scale-90 ${
+        isActive
+          ? "bg-emerald-50"
+          : dangerHover
+            ? "text-stone-300 opacity-0 hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
+            : "hover:bg-stone-50"
       }`}
-      style={
-        isActive && activeBg && activeColor
-          ? { backgroundColor: activeBg, color: activeColor }
-          : undefined
-      }
     >
       {children}
     </button>

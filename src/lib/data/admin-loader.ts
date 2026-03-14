@@ -135,28 +135,41 @@ function buildPlatformStats(
 async function fetchOwnerMap(
   adminClient: ReturnType<typeof createAdminClient>,
   ownerIds: string[],
-): Promise<
-  Record<
-    string,
-    { email: string; created_at: string; last_sign_in_at: string | null }
-  >
-> {
+) {
   const map: Record<
     string,
     { email: string; created_at: string; last_sign_in_at: string | null }
   > = {};
 
   try {
-    const {
-      data: { users },
-    } = await adminClient.auth.admin.listUsers({ perPage: 1000 });
-    for (const u of users ?? []) {
-      if (ownerIds.includes(u.id)) {
-        map[u.id] = {
-          email: u.email ?? "—",
-          created_at: u.created_at,
-          last_sign_in_at: u.last_sign_in_at ?? null,
-        };
+    let page = 1;
+    let hasMore = true;
+
+    while (hasMore) {
+      const { data, error } = await adminClient.auth.admin.listUsers({
+        page,
+        perPage: 1000,
+      });
+
+      if (error || !data?.users || data.users.length === 0) {
+        hasMore = false;
+        break;
+      }
+
+      for (const u of data.users) {
+        if (ownerIds.includes(u.id)) {
+          map[u.id] = {
+            email: u.email ?? "—",
+            created_at: u.created_at,
+            last_sign_in_at: u.last_sign_in_at ?? null,
+          };
+        }
+      }
+
+      if (data.users.length < 1000) {
+        hasMore = false;
+      } else {
+        page++;
       }
     }
   } catch (err) {

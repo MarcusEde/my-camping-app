@@ -177,7 +177,11 @@ export default function GuestAppUI({
                   />
                 )}
                 {activeTab === "info" && (
-                  <InfoTab campground={campground} lang={lang} />
+                  <InfoTab
+                    campground={campground}
+                    lang={lang}
+                    sessionId={sessionId}
+                  />
                 )}
               </motion.div>
             </AnimatePresence>

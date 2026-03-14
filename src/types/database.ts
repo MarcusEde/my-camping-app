@@ -29,6 +29,9 @@ export type AnnouncementPriority = "normal" | "high";
 
 export type WeatherCategory = "rain" | "heat" | "cold" | "wind";
 
+// ─── Info click types ─────────────────────────────────────
+export type InfoType = "checkout" | "trash" | "emergency";
+
 // ─── Translation shapes ───────────────────────────────────
 
 export type AnnouncementTranslations = {
@@ -154,19 +157,27 @@ export type PromotedPartner = {
   ends_at?: string | null;
   created_at: string;
   translations: PartnerTranslations | null;
-
-  /** Owner-defined coupon code. When set, guests can "Claim" it. */
   coupon_code?: string | null;
 };
 
 // ─── Redemption ───────────────────────────────────────────
 
-/** Tracks a guest claiming (revealing) a partner coupon code. */
 export type Redemption = {
   id: string;
   campground_id: string;
   partner_id: string;
   session_id: string;
+  created_at: string;
+};
+
+// ─── InfoClick (NEW) ──────────────────────────────────────
+
+/** Tracks a guest opening a Quick Info accordion (checkout, trash, emergency). */
+export type InfoClick = {
+  id: string;
+  campground_id: string;
+  session_id: string;
+  info_type: InfoType;
   created_at: string;
 };
 
@@ -211,6 +222,7 @@ export type PageView = {
   session_id: string;
   tab: string;
   created_at: string;
+  language: string | null;
 };
 
 export type GuestFeedbackRow = {
@@ -237,9 +249,8 @@ export interface AnalyticsStats {
   avgRating: number | null;
   feedbackCount: number;
   directionsClicks: number;
-
-  /** Total coupon codes revealed by guests in the period. */
   totalRedemptions: number;
+  totalInfoClicks: number;
 
   topTabs: { tab: string; count: number }[];
   topPlaces: { placeId: string; placeName: string; clicks: number }[];
@@ -254,10 +265,22 @@ export interface AnalyticsStats {
     guestsChange: number;
     redemptionsChange: number;
   };
+
+  /** Language breakdown from page_views.language — proves translation ROI */
+  topLanguages: { language: string; count: number }[];
+
+  /** Most-saved places from saved_places_analytics — proves local discovery value */
+  topSavedPlaces: { placeId: string; placeName: string; count: number }[];
 }
 
 // ─── Database Schema ──────────────────────────────────────
-
+export type SavedPlaceAnalytics = {
+  id: string;
+  campground_id: string;
+  place_id: string;
+  session_id: string;
+  created_at: string;
+};
 export type Database = {
   public: {
     Tables: {
@@ -313,6 +336,18 @@ export type Database = {
         Row: Redemption;
         Insert: Omit<Redemption, "id" | "created_at">;
         Update: Partial<Omit<Redemption, "id" | "created_at">>;
+        Relationships: [];
+      };
+      info_clicks: {
+        Row: InfoClick;
+        Insert: Omit<InfoClick, "id" | "created_at">;
+        Update: Partial<Omit<InfoClick, "id" | "created_at">>;
+        Relationships: [];
+      };
+      saved_places_analytics: {
+        Row: SavedPlaceAnalytics;
+        Insert: Omit<SavedPlaceAnalytics, "id" | "created_at">;
+        Update: Partial<Omit<SavedPlaceAnalytics, "id" | "created_at">>;
         Relationships: [];
       };
     };

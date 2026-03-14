@@ -163,8 +163,16 @@ export function usePartnerManager({
     });
   };
 
+  const formatForInput = (isoString: string) => {
+    const d = new Date(isoString);
+    // Offset the timezone so .toISOString() outputs local time
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 16);
+  };
   // ── Edit ──
   const handleStartEdit = (p: PromotedPartnerWithClicks) => {
+    setEditStartsAt(p.starts_at ? formatForInput(p.starts_at) : "");
+    setEditEndsAt(p.ends_at ? formatForInput(p.ends_at) : "");
     setShowAddForm(false);
     setEditingId(p.id);
     setEditName(p.business_name);
@@ -174,8 +182,6 @@ export function usePartnerManager({
     setEditLogoUrl(p.logo_url || "");
     setEditPlaceId(p.cached_place_id || "");
     setEditRank(p.priority_rank);
-    setEditStartsAt(p.starts_at ? p.starts_at.slice(0, 16) : "");
-    setEditEndsAt(p.ends_at ? p.ends_at.slice(0, 16) : "");
     setEditCouponCode(p.coupon_code || "");
   };
 

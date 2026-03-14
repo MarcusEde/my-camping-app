@@ -1,5 +1,16 @@
 export function generateId(): string {
-  // SEC-004 FIX: Use standard native crypto module (available in CF Workers and Node.js)
-  // Ensures cryptographically secure UUIDs without relying on weak Math.random() fallbacks.
-  return crypto.randomUUID();
+  // Plan A: Använd den inbyggda säkra funktionen (Kräver HTTPS / Localhost)
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return crypto.randomUUID();
+  }
+
+  // Plan B: Livräddaren för Safari och gamla telefoner
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
 }

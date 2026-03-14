@@ -42,3 +42,36 @@ export function fmtRelative(d: string | null): string {
   if (days < 30) return `${days}d sedan`;
   return fmtDate(d);
 }
+export function repairJSON(raw: string): string {
+  let s = raw.trim();
+
+  if (s.startsWith("```json")) s = s.slice(7);
+  else if (s.startsWith("```")) s = s.slice(3);
+  if (s.endsWith("```")) s = s.slice(0, -3);
+  s = s.trim();
+
+  // Handle arrays
+  if (s.includes('"time"')) {
+    const start = s.indexOf("[");
+    if (start > 0) s = s.slice(start);
+    if (!s.startsWith("[")) s = "[" + s;
+
+    const end = s.lastIndexOf("]");
+    if (end > 0) {
+      s = s.slice(0, end + 1);
+    } else {
+      const lb = s.lastIndexOf("}");
+      if (lb > 0) s = s.slice(0, lb + 1) + "]";
+      else return "[]";
+    }
+  } else {
+    // Handle standard objects (for translations)
+    const start = s.indexOf("{");
+    if (start > 0) s = s.slice(start);
+    const end = s.lastIndexOf("}");
+    if (end > 0) s = s.slice(0, end + 1);
+  }
+
+  s = s.replace(/,\s*]/g, "]").replace(/,\s*}/g, "}");
+  return s;
+}
