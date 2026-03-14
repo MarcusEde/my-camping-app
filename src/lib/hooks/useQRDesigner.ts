@@ -97,6 +97,16 @@ function hexToRgb(hex: string) {
   };
 }
 
+/** Normalize any hex string to lowercase 7-char format (#rrggbb). */
+function normalizeHex(hex: string): string {
+  const raw = hex.replace("#", "");
+  const full =
+    raw.length === 3
+      ? raw[0] + raw[0] + raw[1] + raw[1] + raw[2] + raw[2]
+      : raw.padEnd(6, "0");
+  return `#${full.toLowerCase()}`;
+}
+
 function darken(hex: string, amt: number): string {
   const { r, g, b } = hexToRgb(hex);
   const d = (v: number) => Math.max(0, Math.round(v * (1 - amt)));
@@ -244,7 +254,7 @@ function resetShadow(ctx: CanvasRenderingContext2D) {
 }
 
 /* ─────────────────────────────────────────────────────
-   DrawCtx — shared data for template renderers
+   DrawCtx
 ───────────────────────────────────────────────────── */
 interface DC {
   ctx: CanvasRenderingContext2D;
@@ -264,12 +274,6 @@ interface DC {
 
 /* ═══════════════════════════════════════════════════════
    MINIMAL
-   ───────────────────────────────────────────────────
-   Swiss international poster style.
-   Thick left accent bar, oversized bold name anchored
-   top, single hairline rule, QR centred, strict grid.
-   Visual interest from extreme scale contrast between
-   the massive headline and the small supporting text.
 ═══════════════════════════════════════════════════════ */
 function drawMinimal(d: DC) {
   const {
@@ -289,19 +293,19 @@ function drawMinimal(d: DC) {
   const m = Math.round(Math.min(W, H) * 0.07);
   const bar = Math.max(5, Math.round(W * 0.016));
 
-  /* ── background ── */
   ctx.fillStyle = "#FFFFFF";
   ctx.fillRect(0, 0, W, H);
 
-  /* ── left accent bar ── */
   ctx.fillStyle = fg;
   ctx.fillRect(0, 0, bar, H);
+
+  ctx.fillStyle = fg;
+  ctx.fillRect(0, 0, W, 3);
 
   const left = bar + m;
   const contentW = W - left - m;
   let y = m;
 
-  /* ── camp name — aggressively large ── */
   if (showName) {
     const fs = Math.min(54, W * 0.125, H * 0.07);
     ctx.fillStyle = fg;
@@ -320,7 +324,6 @@ function drawMinimal(d: DC) {
     y += m;
   }
 
-  /* ── hairline rule ── */
   ctx.strokeStyle = rgba(fg, 0.12);
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -329,12 +332,10 @@ function drawMinimal(d: DC) {
   ctx.stroke();
   y += Math.round(m * 0.5);
 
-  /* ── QR centred in remaining space ── */
   const footerH = m * 2 + (showSlogan && slogan ? 48 : 28);
   const qrY = y + (H - footerH - y - qrPx) / 2;
   const qrX = (W - qrPx) / 2;
 
-  /* faint outline to separate QR from paper */
   ctx.strokeStyle = rgba(fg, 0.045);
   ctx.lineWidth = 1;
   rr(ctx, qrX - 14, qrY - 14, qrPx + 28, qrPx + 28, 4);
@@ -342,20 +343,17 @@ function drawMinimal(d: DC) {
 
   ctx.drawImage(qrImg, qrX, qrY, qrPx, qrPx);
 
-  /* ── CTA ── */
   ctx.fillStyle = rgba(fg, 0.32);
   ctx.font = `500 ${Math.min(12, W * 0.028)}px system-ui, sans-serif`;
   ctx.textAlign = "center";
   ctx.fillText("Skanna med din mobil", W / 2, qrY + qrPx + 26);
 
-  /* ── slogan ── */
   if (showSlogan && slogan) {
     ctx.fillStyle = rgba(fg, 0.18);
     ctx.font = `400 italic ${Math.min(11, W * 0.025)}px Georgia, serif`;
     ctx.fillText(slogan, W / 2, qrY + qrPx + 48);
   }
 
-  /* ── URL ── */
   ctx.fillStyle = rgba(fg, 0.14);
   ctx.font = `400 ${Math.min(8, W * 0.019)}px monospace`;
   ctx.textAlign = "center";
@@ -364,11 +362,6 @@ function drawMinimal(d: DC) {
 
 /* ═══════════════════════════════════════════════════════
    BRANDED
-   ───────────────────────────────────────────────────
-   Confident colour-block header (top 42 %) with subtle
-   gradient + one large soft circle for depth.
-   Clean transition to white. QR on a floating card
-   with real shadow. Professional marketing piece feel.
 ═══════════════════════════════════════════════════════ */
 function drawBranded(d: DC) {
   const {
@@ -389,7 +382,6 @@ function drawBranded(d: DC) {
   const m = Math.round(Math.min(W, H) * 0.07);
   const splitY = Math.round(H * 0.42);
 
-  /* ── colour block — slight gradient for richness ── */
   const grad = ctx.createLinearGradient(0, 0, 0, splitY);
   grad.addColorStop(0, darken(bg, 0.18));
   grad.addColorStop(0.6, bg);
@@ -397,17 +389,14 @@ function drawBranded(d: DC) {
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, W, splitY);
 
-  /* ── white lower zone ── */
   ctx.fillStyle = "#FFFFFF";
   ctx.fillRect(0, splitY, W, H - splitY);
 
-  /* ── single decorative circle — soft, large, anchored top-right ── */
   ctx.fillStyle = rgba(lighten(bg, 0.18), 0.18);
   ctx.beginPath();
   ctx.arc(W * 0.84, splitY * 0.08, W * 0.38, 0, Math.PI * 2);
   ctx.fill();
 
-  /* ── camp name on colour block ── */
   if (showName) {
     const fs = Math.min(42, W * 0.095, splitY * 0.24);
     ctx.fillStyle = "#FFFFFF";
@@ -421,21 +410,19 @@ function drawBranded(d: DC) {
     resetShadow(ctx);
   }
 
-  /* ── tagline on colour block ── */
   ctx.fillStyle = rgba("#FFFFFF", 0.55);
   ctx.font = `500 ${Math.min(11, W * 0.025)}px system-ui, sans-serif`;
   ctx.textAlign = "left";
   ctx.fillText("Skanna för att utforska", m, splitY - Math.round(m * 0.55));
 
-  /* ── thin white line under name ── */
   ctx.strokeStyle = rgba("#FFFFFF", 0.2);
   ctx.lineWidth = 1;
+  const lineY = splitY - Math.round(m * 1);
   ctx.beginPath();
-  ctx.moveTo(m, splitY - Math.round(m * 1));
-  ctx.lineTo(m + W * 0.35, splitY - Math.round(m * 1));
+  ctx.moveTo(m, lineY);
+  ctx.lineTo(m + W * 0.35, lineY);
   ctx.stroke();
 
-  /* ── QR card — centred in white zone ── */
   const qrX = (W - qrPx) / 2;
   const whiteTop = splitY;
   const whiteBot = H - m - 24;
@@ -447,7 +434,6 @@ function drawBranded(d: DC) {
     cardPad -
     sloganOff;
 
-  /* shadow */
   ctx.shadowColor = rgba(bg, 0.14);
   ctx.shadowBlur = 20;
   ctx.shadowOffsetY = 6;
@@ -463,7 +449,6 @@ function drawBranded(d: DC) {
   ctx.fill();
   resetShadow(ctx);
 
-  /* card border */
   ctx.strokeStyle = rgba(bg, 0.1);
   ctx.lineWidth = 1;
   rr(
@@ -478,7 +463,6 @@ function drawBranded(d: DC) {
 
   ctx.drawImage(qrImg, qrX, qrY, qrPx, qrPx);
 
-  /* ── CTA / slogan below QR ── */
   if (showSlogan && slogan) {
     ctx.fillStyle = rgba(bg, 0.5);
     ctx.font = `500 ${Math.min(12, W * 0.027)}px system-ui, sans-serif`;
@@ -497,7 +481,6 @@ function drawBranded(d: DC) {
     );
   }
 
-  /* ── brand accent line ── */
   const accentW = Math.round(W * 0.12);
   ctx.strokeStyle = rgba(bg, 0.18);
   ctx.lineWidth = 2;
@@ -508,7 +491,6 @@ function drawBranded(d: DC) {
   ctx.stroke();
   ctx.lineCap = "butt";
 
-  /* ── URL ── */
   ctx.fillStyle = rgba(bg, 0.2);
   ctx.font = `400 ${Math.min(8, W * 0.019)}px monospace`;
   ctx.textAlign = "center";
@@ -517,13 +499,6 @@ function drawBranded(d: DC) {
 
 /* ═══════════════════════════════════════════════════════
    NATURE
-   ───────────────────────────────────────────────────
-   Warm cream paper, elegant double-line border,
-   centred serif typography, ornamental rule with
-   diamond, soft card for QR, and a barely-visible
-   mountain silhouette at the foot for atmosphere.
-   Lodge / national park poster feel via palette
-   and type — no janky bezier illustrations.
 ═══════════════════════════════════════════════════════ */
 function drawNature(d: DC) {
   const { ctx, W, H, qrImg, qrPx, name, slogan, showName, showSlogan, url } = d;
@@ -537,26 +512,22 @@ function drawNature(d: DC) {
 
   const m = Math.round(Math.min(W, H) * 0.07);
 
-  /* ── paper background ── */
   const bgG = ctx.createLinearGradient(0, 0, 0, H);
   bgG.addColorStop(0, paper);
   bgG.addColorStop(1, cream);
   ctx.fillStyle = bgG;
   ctx.fillRect(0, 0, W, H);
 
-  /* ── outer border ── */
   ctx.strokeStyle = rgba(warm, 0.45);
   ctx.lineWidth = 1.5;
   const b1 = Math.round(m * 0.55);
   ctx.strokeRect(b1, b1, W - b1 * 2, H - b1 * 2);
 
-  /* ── inner border (double-line) ── */
   ctx.strokeStyle = rgba(warm, 0.18);
   ctx.lineWidth = 0.6;
   const b2 = b1 + 6;
   ctx.strokeRect(b2, b2, W - b2 * 2, H - b2 * 2);
 
-  /* ── three dots ornament at top ── */
   const dotY = b2 + 16;
   const dotR = 2;
   const dotGap = 12;
@@ -567,7 +538,6 @@ function drawNature(d: DC) {
     ctx.fill();
   }
 
-  /* ── "GÄSTGUIDE" label ── */
   const lblFs = Math.min(9, W * 0.021);
   ctx.fillStyle = rgba(moss, 0.55);
   ctx.font = `600 ${lblFs}px Georgia, serif`;
@@ -575,7 +545,6 @@ function drawNature(d: DC) {
 
   let y = dotY + 36;
 
-  /* ── camp name — centred serif ── */
   if (showName) {
     const fs = Math.min(36, W * 0.082, H * 0.052);
     ctx.fillStyle = earth;
@@ -589,7 +558,6 @@ function drawNature(d: DC) {
     }
     y += fs + (maxLines - 1) * fs * 1.18 + Math.round(fs * 0.45);
 
-    /* ── decorative rule + centre diamond ── */
     const ruleW = Math.min(ctx.measureText(lines[0]).width * 0.65, W * 0.42);
     ctx.strokeStyle = rgba(rust, 0.35);
     ctx.lineWidth = 1;
@@ -598,7 +566,6 @@ function drawNature(d: DC) {
     ctx.lineTo(W / 2 + ruleW / 2, y);
     ctx.stroke();
 
-    /* diamond */
     const ds = 3.5;
     ctx.fillStyle = rgba(rust, 0.45);
     ctx.beginPath();
@@ -612,13 +579,11 @@ function drawNature(d: DC) {
     y += Math.round(m * 0.7);
   }
 
-  /* ── QR on soft card ── */
   const qrX = (W - qrPx) / 2;
   const footerH = m * 2 + (showSlogan && slogan ? 56 : 34);
   const qrY = y + (H - footerH - y - qrPx) / 2;
   const cardPad = 16;
 
-  /* card fill */
   ctx.fillStyle = rgba("#FFFFFF", 0.55);
   rr(
     ctx,
@@ -629,7 +594,6 @@ function drawNature(d: DC) {
     5,
   );
   ctx.fill();
-  /* card border */
   ctx.strokeStyle = rgba(warm, 0.3);
   ctx.lineWidth = 1;
   rr(
@@ -644,20 +608,17 @@ function drawNature(d: DC) {
 
   ctx.drawImage(qrImg, qrX, qrY, qrPx, qrPx);
 
-  /* ── CTA ── */
   ctx.fillStyle = rust;
   ctx.font = `600 italic ${Math.min(13, W * 0.03)}px Georgia, serif`;
   ctx.textAlign = "center";
   ctx.fillText("Skanna med mobilen", W / 2, qrY + qrPx + cardPad + 24);
 
-  /* ── slogan ── */
   if (showSlogan && slogan) {
     ctx.fillStyle = rgba(earth, 0.3);
     ctx.font = `400 italic ${Math.min(11, W * 0.025)}px Georgia, serif`;
     ctx.fillText(`"${slogan}"`, W / 2, qrY + qrPx + cardPad + 46);
   }
 
-  /* ── mountain silhouette — barely visible atmosphere ── */
   const mtBase = H - b1 - 2;
   const mtH = H * 0.035;
   ctx.fillStyle = rgba(moss, 0.045);
@@ -675,7 +636,6 @@ function drawNature(d: DC) {
   ctx.closePath();
   ctx.fill();
 
-  /* ── URL ── */
   ctx.fillStyle = rgba(earth, 0.16);
   ctx.font = `400 ${Math.min(8, W * 0.019)}px monospace`;
   ctx.textAlign = "center";
@@ -684,12 +644,6 @@ function drawNature(d: DC) {
 
 /* ═══════════════════════════════════════════════════════
    DARK
-   ───────────────────────────────────────────────────
-   Deep charcoal field, film grain, precise gold
-   accents. Inset gold border, centred name in warm
-   white, QR on a floating white card with gold-
-   tinted ring. Cinema title-card / luxury hotel feel.
-   Drama from negative space, not decoration.
 ═══════════════════════════════════════════════════════ */
 function drawDark(d: DC) {
   const { ctx, W, H, qrImg, qrPx, name, slogan, showName, showSlogan, url } = d;
@@ -700,19 +654,15 @@ function drawDark(d: DC) {
 
   const m = Math.round(Math.min(W, H) * 0.07);
 
-  /* ── deep background ── */
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
 
-  /* ── film grain ── */
   drawNoise(ctx, W, H, 0.014, 0.09);
 
-  /* ── inset gold border ── */
   ctx.strokeStyle = rgba(gold, 0.25);
   ctx.lineWidth = 0.8;
   ctx.strokeRect(m, m, W - m * 2, H - m * 2);
 
-  /* ── top gold rule (short, centred) ── */
   const ruleW = Math.round(W * 0.22);
   const drawGoldRule = (y: number, opacity = 0.45) => {
     ctx.strokeStyle = rgba(gold, opacity);
@@ -726,7 +676,6 @@ function drawDark(d: DC) {
 
   let y = m + Math.round(m * 1.2);
 
-  /* ── camp name ── */
   if (showName) {
     const fs = Math.min(36, W * 0.082, H * 0.05);
     ctx.fillStyle = warmWhite;
@@ -742,7 +691,6 @@ function drawDark(d: DC) {
     );
     y += fs + consumed + Math.round(m * 0.5);
 
-    /* shorter gold rule below name */
     const nameRuleW = Math.round(ruleW * 0.55);
     ctx.strokeStyle = rgba(gold, 0.35);
     ctx.lineWidth = 1;
@@ -753,14 +701,12 @@ function drawDark(d: DC) {
     y += Math.round(m * 0.6);
   }
 
-  /* ── QR card — centred ── */
   const qrX = (W - qrPx) / 2;
   const footerH = m * 2 + (showSlogan && slogan ? 60 : 38);
   const qrY = y + (H - footerH - y - qrPx) / 2;
   const ringPad = 22;
   const cardPad = 8;
 
-  /* dark surround card */
   ctx.fillStyle = "#1C1A14";
   rr(
     ctx,
@@ -772,7 +718,6 @@ function drawDark(d: DC) {
   );
   ctx.fill();
 
-  /* gold ring */
   ctx.strokeStyle = rgba(gold, 0.2);
   ctx.lineWidth = 1;
   rr(
@@ -785,7 +730,6 @@ function drawDark(d: DC) {
   );
   ctx.stroke();
 
-  /* white QR backing */
   ctx.fillStyle = "#FFFFFF";
   rr(
     ctx,
@@ -799,12 +743,10 @@ function drawDark(d: DC) {
 
   ctx.drawImage(qrImg, qrX, qrY, qrPx, qrPx);
 
-  /* ── "SKANNA HÄR" in gold ── */
   ctx.fillStyle = gold;
   ctx.font = `600 ${Math.min(11, W * 0.024)}px system-ui, sans-serif`;
   trackedText(ctx, "SKANNA HÄR", W / 2, qrY + qrPx + ringPad + 18, 4, "center");
 
-  /* ── slogan ── */
   if (showSlogan && slogan) {
     ctx.fillStyle = rgba(warmWhite, 0.28);
     ctx.font = `300 italic ${Math.min(11, W * 0.025)}px Georgia, serif`;
@@ -812,10 +754,8 @@ function drawDark(d: DC) {
     ctx.fillText(slogan, W / 2, qrY + qrPx + ringPad + 42);
   }
 
-  /* ── bottom gold rule ── */
   drawGoldRule(H - m - Math.round(m * 0.55), 0.2);
 
-  /* ── URL ── */
   ctx.fillStyle = rgba(warmWhite, 0.13);
   ctx.font = `400 ${Math.min(8, W * 0.019)}px monospace`;
   ctx.textAlign = "center";
@@ -835,18 +775,39 @@ export function useQRDesigner({ campground, baseUrl }: UseQRDesignerProps) {
   const guestUrl = `${baseUrl}/camp/${campground.slug}`;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  /* ── Use refs for transient render state to avoid re-render cascades ── */
   const [ready, setReady] = useState(false);
-  const [isRendering, setIsRendering] = useState(false);
+  const isRenderingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   const [template, setTemplate] = useState("branded");
-  const [bgColor, setBgColor] = useState(brand);
-  const [textColor, setTextColor] = useState("#FFFFFF");
+  const [bgColor, _setBgColor] = useState(() => normalizeHex(brand));
+  const [textColor, _setTextColor] = useState("#ffffff");
   const [showName, setShowName] = useState(true);
   const [showSlogan, setShowSlogan] = useState(true);
   const [slogan, setSlogan] = useState("Skanna för att utforska!");
   const [qrSize, setQrSize] = useState<QRSize>("medium");
   const [paperSize, setPaperSize] = useState<PaperSize>("a5");
+
+  /* ── Stable, normalizing color setters — prevents the
+       <input type="color"> → onChange → setState → re-render → onChange loop.
+       Native color inputs return lowercase "#rrggbb", but if we store
+       a different casing the controlled value mismatches and the input
+       fires onChange again, creating an infinite loop. ── */
+  const setBgColor = useCallback((c: string) => {
+    _setBgColor((prev) => {
+      const next = normalizeHex(c);
+      return next === prev ? prev : next;
+    });
+  }, []);
+
+  const setTextColor = useCallback((c: string) => {
+    _setTextColor((prev) => {
+      const next = normalizeHex(c);
+      return next === prev ? prev : next;
+    });
+  }, []);
 
   const applyTemplate = useCallback(
     (id: string) => {
@@ -858,14 +819,16 @@ export function useQRDesigner({ campground, baseUrl }: UseQRDesignerProps) {
       setShowName(t.showName);
       setShowSlogan(t.showSlogan);
     },
-    [brand],
+    [brand, setBgColor, setTextColor],
   );
 
+  /* ── Canvas render — pure async, no state updates that feed back
+       into its own dependency array ── */
   const renderCanvas = useCallback(async () => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || isRenderingRef.current) return;
 
-    setIsRendering(true);
+    isRenderingRef.current = true;
     setError(null);
 
     try {
@@ -940,7 +903,7 @@ export function useQRDesigner({ campground, baseUrl }: UseQRDesignerProps) {
       setError(err instanceof Error ? err.message : "Failed to render");
       setReady(true);
     } finally {
-      setIsRendering(false);
+      isRenderingRef.current = false;
     }
   }, [
     bgColor,
@@ -956,14 +919,13 @@ export function useQRDesigner({ campground, baseUrl }: UseQRDesignerProps) {
     brand,
   ]);
 
+  /* ── Debounced effect — the core fix.
+       Breaks any synchronous setState → render → setState chain by
+       deferring the actual canvas work. Also coalesces rapid changes
+       (e.g. dragging a color picker) into a single render. ── */
   useEffect(() => {
-    let cancelled = false;
-    renderCanvas().finally(() => {
-      if (cancelled) return;
-    });
-    return () => {
-      cancelled = true;
-    };
+    const timer = setTimeout(renderCanvas, 60);
+    return () => clearTimeout(timer);
   }, [renderCanvas]);
 
   const handleDownload = useCallback(() => {
@@ -978,7 +940,9 @@ export function useQRDesigner({ campground, baseUrl }: UseQRDesignerProps) {
   const handleCopyUrl = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(guestUrl);
-    } catch {}
+    } catch {
+      /* noop */
+    }
   }, [guestUrl]);
 
   const handlePrint = useCallback(() => {
@@ -1002,7 +966,7 @@ export function useQRDesigner({ campground, baseUrl }: UseQRDesignerProps) {
     brand,
     guestUrl,
     ready,
-    isRendering,
+    isRendering: isRenderingRef.current,
     error,
     paperLabel: PAPER_SIZES[paperSize].label,
     template,
