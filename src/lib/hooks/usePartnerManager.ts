@@ -50,6 +50,7 @@ export function usePartnerManager({
   const [newRank, setNewRank] = useState(0);
   const [newStartsAt, setNewStartsAt] = useState("");
   const [newEndsAt, setNewEndsAt] = useState("");
+  const [newCouponCode, setNewCouponCode] = useState("");
 
   // ── Edit state ──
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -62,6 +63,7 @@ export function usePartnerManager({
   const [editRank, setEditRank] = useState(0);
   const [editStartsAt, setEditStartsAt] = useState("");
   const [editEndsAt, setEditEndsAt] = useState("");
+  const [editCouponCode, setEditCouponCode] = useState("");
 
   // ── Computed ──
   const linkablePlaces = useMemo(
@@ -126,6 +128,7 @@ export function usePartnerManager({
     setNewRank(0);
     setNewStartsAt("");
     setNewEndsAt("");
+    setNewCouponCode("");
     setShowAddForm(false);
   };
 
@@ -150,6 +153,7 @@ export function usePartnerManager({
             ? new Date(newStartsAt).toISOString()
             : undefined,
           ends_at: newEndsAt ? new Date(newEndsAt).toISOString() : undefined,
+          coupon_code: newCouponCode.trim() || undefined,
         });
         resetAddForm();
       } catch (e: unknown) {
@@ -159,8 +163,16 @@ export function usePartnerManager({
     });
   };
 
+  const formatForInput = (isoString: string) => {
+    const d = new Date(isoString);
+    // Offset the timezone so .toISOString() outputs local time
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 16);
+  };
   // ── Edit ──
   const handleStartEdit = (p: PromotedPartnerWithClicks) => {
+    setEditStartsAt(p.starts_at ? formatForInput(p.starts_at) : "");
+    setEditEndsAt(p.ends_at ? formatForInput(p.ends_at) : "");
     setShowAddForm(false);
     setEditingId(p.id);
     setEditName(p.business_name);
@@ -170,8 +182,7 @@ export function usePartnerManager({
     setEditLogoUrl(p.logo_url || "");
     setEditPlaceId(p.cached_place_id || "");
     setEditRank(p.priority_rank);
-    setEditStartsAt(p.starts_at ? p.starts_at.slice(0, 16) : "");
-    setEditEndsAt(p.ends_at ? p.ends_at.slice(0, 16) : "");
+    setEditCouponCode(p.coupon_code || "");
   };
 
   const handleCancelEdit = () => setEditingId(null);
@@ -192,6 +203,7 @@ export function usePartnerManager({
             ? new Date(editStartsAt).toISOString()
             : undefined,
           ends_at: editEndsAt ? new Date(editEndsAt).toISOString() : null,
+          coupon_code: editCouponCode.trim() || null,
         });
         setEditingId(null);
       } catch (e: unknown) {
@@ -247,6 +259,8 @@ export function usePartnerManager({
     setNewStartsAt,
     newEndsAt,
     setNewEndsAt,
+    newCouponCode,
+    setNewCouponCode,
     resetAddForm,
 
     // Edit
@@ -269,6 +283,8 @@ export function usePartnerManager({
     setEditStartsAt,
     editEndsAt,
     setEditEndsAt,
+    editCouponCode,
+    setEditCouponCode,
 
     // Computed
     linkablePlaces,

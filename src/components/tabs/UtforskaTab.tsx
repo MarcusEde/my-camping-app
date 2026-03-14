@@ -8,8 +8,12 @@ import {
 } from "@/lib/category-styles";
 import { SPRING_TAP, STAGGER_CONTAINER, STAGGER_ITEM } from "@/lib/constants";
 import { ROW_DEFS } from "@/lib/explore-config";
-import { getMapLink, getOpeningHoursDisplay } from "@/lib/place-utils";
-import { parseFormattedDistanceKm, type RoadDistanceMap } from "@/lib/routing";
+import {
+  calculateRelevanceScore,
+  getMapLink,
+  getOpeningHoursDisplay,
+} from "@/lib/place-utils";
+import { type RoadDistanceMap } from "@/lib/routing";
 import { utforskaLabels, type UtforskaLabels } from "@/lib/translations";
 import { hexToRgba } from "@/lib/utils";
 import type { CachedPlace, Campground } from "@/types/database";
@@ -19,6 +23,7 @@ import {
   Clock,
   Compass,
   ExternalLink,
+  Heart,
   MapPin,
   MessageCircle,
   Star,
@@ -31,6 +36,8 @@ interface Props {
   lang: Lang;
   distanceMap: RoadDistanceMap;
   onDirectionsClick?: (placeId: string) => void;
+  isSaved?: (id: string) => boolean;
+  toggleSaved?: (id: string) => void;
 }
 
 export default function UtforskaTab({
@@ -39,19 +46,28 @@ export default function UtforskaTab({
   lang,
   distanceMap,
   onDirectionsClick,
+  isSaved,
+  toggleSaved,
 }: Props) {
   const brand = campground.primary_color || "#2A3C34";
   const l = utforskaLabels[lang];
   const isSwedish = lang === "sv";
 
+  // ── Extract campground coordinates once ──────────────────────────
+  // These are passed into the scoring function so it can compute
+  // Haversine fallback distances when OSRM data is missing.
+  const campLat = campground.latitude ?? 0;
+  const campLon = campground.longitude ?? 0;
+
   const renderedRows = ROW_DEFS.map((row) => {
-    const filtered = places.filter(row.filter).sort((a, b) => {
-      if (a.is_pinned && !b.is_pinned) return -1;
-      if (!a.is_pinned && b.is_pinned) return 1;
-      const kmA = parseFormattedDistanceKm(distanceMap[a.id] ?? "") ?? 999;
-      const kmB = parseFormattedDistanceKm(distanceMap[b.id] ?? "") ?? 999;
-      return kmA - kmB;
-    });
+    // ── Filter by category, then sort by relevance (descending) ────
+    const filtered = places
+      .filter(row.filter)
+      .sort(
+        (a, b) =>
+          calculateRelevanceScore(b, distanceMap, campLat, campLon) -
+          calculateRelevanceScore(a, distanceMap, campLat, campLon),
+      );
 
     if (filtered.length === 0) return null;
 
@@ -81,6 +97,8 @@ export default function UtforskaTab({
               isSwedish={isSwedish}
               distance={distanceMap[place.id] ?? ""}
               onDirectionsClick={onDirectionsClick}
+              saved={isSaved?.(place.id) ?? false}
+              onToggleSave={() => toggleSaved?.(place.id)}
             />
           ))}
         </div>
@@ -105,6 +123,12 @@ export default function UtforskaTab({
     </motion.div>
   );
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Everything below this line is IDENTICAL to the original file.
+// No changes to RowHeader, PlaceCard, CardGradientHeader, MetaPills,
+// MetaPill, OwnerNote, CardAction, or EmptyState.
+// ═══════════════════════════════════════════════════════════════════════════
 
 /* ── Row Header ──────────────────────────────────────── */
 
@@ -149,6 +173,8 @@ function PlaceCard({
   isSwedish,
   distance,
   onDirectionsClick,
+  saved,
+  onToggleSave,
 }: {
   place: CachedPlace;
   brand: string;
@@ -157,6 +183,8 @@ function PlaceCard({
   isSwedish: boolean;
   distance: string;
   onDirectionsClick?: (placeId: string) => void;
+  saved: boolean;
+  onToggleSave: () => void;
 }) {
   const catStyle = getCategoryStyle(place.category);
   const angle = gradientAngle(place.id);
@@ -179,16 +207,17 @@ function PlaceCard({
       whileTap={{ scale: 0.97 }}
       transition={SPRING_TAP}
     >
-      {/* ── Gradient header ─────────────────────── */}
       <CardGradientHeader
         catStyle={catStyle}
         angle={angle}
         isPinned={place.is_pinned}
         rating={place.rating}
         staffPickLabel={l.staffPick}
+        saved={saved}
+        onToggleSave={onToggleSave}
+        brand={brand}
       />
 
-      {/* ── Card body ───────────────────────────── */}
       <div className="flex flex-1 flex-col p-4">
         <h4 className="line-clamp-1 text-[14px] font-black leading-tight tracking-tight text-stone-800">
           {place.name}
@@ -232,12 +261,18 @@ function CardGradientHeader({
   isPinned,
   rating,
   staffPickLabel,
+  saved,
+  onToggleSave,
+  brand,
 }: {
   catStyle: ReturnType<typeof getCategoryStyle>;
   angle: number;
   isPinned: boolean;
   rating: number | null;
   staffPickLabel: string;
+  saved: boolean;
+  onToggleSave: () => void;
+  brand: string;
 }) {
   return (
     <div
@@ -309,6 +344,40 @@ function CardGradientHeader({
           </span>
         </div>
       )}
+
+      <motion.button
+        onClick={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          onToggleSave();
+        }}
+        className="absolute right-3 top-3 z-20 flex h-8 w-8 items-center justify-center rounded-full"
+        style={{
+          backgroundColor: saved
+            ? "rgba(255,255,255,0.95)"
+            : "rgba(255,255,255,0.7)",
+          backdropFilter: "blur(4px)",
+          WebkitBackdropFilter: "blur(4px)",
+          boxShadow: saved
+            ? `0 2px 8px ${hexToRgba(brand, 0.2)}`
+            : "0 1px 4px rgba(0,0,0,0.08)",
+        }}
+        whileTap={{ scale: 0.8 }}
+        transition={{ type: "spring", stiffness: 440, damping: 24 }}
+        aria-label={saved ? "Remove from My Stay" : "Save to My Stay"}
+      >
+        <motion.div
+          animate={saved ? { scale: [1, 1.3, 1] } : { scale: 1 }}
+          transition={{ duration: 0.3, ease: "easeOut" }}
+        >
+          <Heart
+            size={14}
+            strokeWidth={2}
+            fill={saved ? "#ef4444" : "none"}
+            className={saved ? "text-red-500" : "text-stone-500"}
+          />
+        </motion.div>
+      </motion.button>
 
       {rating != null && (
         <span

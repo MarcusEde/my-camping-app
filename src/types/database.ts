@@ -27,9 +27,13 @@ export type PlaceCategory =
 export type AnnouncementType = "info" | "event" | "warning";
 export type AnnouncementPriority = "normal" | "high";
 
+export type WeatherCategory = "rain" | "heat" | "cold" | "wind";
+
+// ─── Info click types ─────────────────────────────────────
+export type InfoType = "checkout" | "trash" | "emergency";
+
 // ─── Translation shapes ───────────────────────────────────
 
-/** Per-language translation for an announcement (title + content). */
 export type AnnouncementTranslations = {
   [lang in "en" | "de" | "da" | "nl" | "no"]?: {
     title: string;
@@ -37,12 +41,10 @@ export type AnnouncementTranslations = {
   };
 };
 
-/** Per-language translation for a short owner note (plain string). */
 export type NoteTranslations = {
   [lang in "en" | "de" | "da" | "nl" | "no"]?: string;
 };
 
-/** Per-language translation for a partner (name + description). */
 export type PartnerTranslations = {
   [lang in "en" | "de" | "da" | "nl" | "no"]?: {
     business_name: string;
@@ -50,7 +52,6 @@ export type PartnerTranslations = {
   };
 };
 
-/** Translatable campground settings fields. */
 export type TranslatableSettingsFields =
   | "check_out_info"
   | "trash_rules"
@@ -58,7 +59,6 @@ export type TranslatableSettingsFields =
   | "camp_rules"
   | "reception_hours";
 
-/** Per-language translation for campground info/settings text. */
 export type SettingsTranslations = {
   [lang in "en" | "de" | "da" | "nl" | "no"]?: {
     [field in TranslatableSettingsFields]?: string;
@@ -78,20 +78,17 @@ export type Campground = {
   trial_ends_at: string;
   created_at: string;
 
-  // Branding
   primary_color: string;
   logo_url?: string | null;
   hero_image_url?: string | null;
   hero_image_position?: string | null;
 
-  // Guest info
   wifi_name?: string | null;
   wifi_password?: string | null;
   check_out_info?: string | null;
   trash_rules?: string | null;
   emergency_info?: string | null;
 
-  // Contact & reception
   phone?: string | null;
   email?: string | null;
   website?: string | null;
@@ -99,10 +96,7 @@ export type Campground = {
   reception_hours?: string | null;
   camp_rules?: string | null;
 
-  // Localization
   supported_languages?: string[] | null;
-
-  /** Auto-translated settings fields keyed by language code. */
   settings_translations?: SettingsTranslations | null;
 };
 
@@ -127,9 +121,7 @@ export type CachedPlace = {
   is_pinned: boolean;
   is_hidden: boolean;
   owner_note: string | null;
-  /** Auto-translated owner notes keyed by language code. */
   note_translations: NoteTranslations | null;
-  /** Pre-computed OSRM road distance from the parent campground (km). */
   road_distance_km: number | null;
 };
 
@@ -144,8 +136,8 @@ export type Announcement = {
   priority: AnnouncementPriority;
   created_at: string;
   expires_at?: string | null;
-  /** Auto-translated title & content keyed by language code. */
   translations: AnnouncementTranslations | null;
+  weather_category?: WeatherCategory | null;
 };
 
 // ─── PromotedPartner ──────────────────────────────────────
@@ -164,8 +156,29 @@ export type PromotedPartner = {
   starts_at: string;
   ends_at?: string | null;
   created_at: string;
-  /** Auto-translated name & description keyed by language code. */
   translations: PartnerTranslations | null;
+  coupon_code?: string | null;
+};
+
+// ─── Redemption ───────────────────────────────────────────
+
+export type Redemption = {
+  id: string;
+  campground_id: string;
+  partner_id: string;
+  session_id: string;
+  created_at: string;
+};
+
+// ─── InfoClick (NEW) ──────────────────────────────────────
+
+/** Tracks a guest opening a Quick Info accordion (checkout, trash, emergency). */
+export type InfoClick = {
+  id: string;
+  campground_id: string;
+  session_id: string;
+  info_type: InfoType;
+  created_at: string;
 };
 
 // ─── InternalLocation ─────────────────────────────────────
@@ -209,6 +222,7 @@ export type PageView = {
   session_id: string;
   tab: string;
   created_at: string;
+  language: string | null;
 };
 
 export type GuestFeedbackRow = {
@@ -235,6 +249,9 @@ export interface AnalyticsStats {
   avgRating: number | null;
   feedbackCount: number;
   directionsClicks: number;
+  totalRedemptions: number;
+  totalInfoClicks: number;
+
   topTabs: { tab: string; count: number }[];
   topPlaces: { placeId: string; placeName: string; clicks: number }[];
   dailyViews: { date: string; views: number; unique: number }[];
@@ -243,10 +260,27 @@ export interface AnalyticsStats {
     comment: string | null;
     created_at: string;
   }[];
-  weekOverWeek: { viewsChange: number; guestsChange: number };
-}
-// ─── Database Schema ──────────────────────────────────────
+  weekOverWeek: {
+    viewsChange: number;
+    guestsChange: number;
+    redemptionsChange: number;
+  };
 
+  /** Language breakdown from page_views.language — proves translation ROI */
+  topLanguages: { language: string; count: number }[];
+
+  /** Most-saved places from saved_places_analytics — proves local discovery value */
+  topSavedPlaces: { placeId: string; placeName: string; count: number }[];
+}
+
+// ─── Database Schema ──────────────────────────────────────
+export type SavedPlaceAnalytics = {
+  id: string;
+  campground_id: string;
+  place_id: string;
+  session_id: string;
+  created_at: string;
+};
 export type Database = {
   public: {
     Tables: {
@@ -296,6 +330,24 @@ export type Database = {
         Row: DirectionsClick;
         Insert: Omit<DirectionsClick, "id" | "created_at">;
         Update: Partial<Omit<DirectionsClick, "id" | "created_at">>;
+        Relationships: [];
+      };
+      redemptions: {
+        Row: Redemption;
+        Insert: Omit<Redemption, "id" | "created_at">;
+        Update: Partial<Omit<Redemption, "id" | "created_at">>;
+        Relationships: [];
+      };
+      info_clicks: {
+        Row: InfoClick;
+        Insert: Omit<InfoClick, "id" | "created_at">;
+        Update: Partial<Omit<InfoClick, "id" | "created_at">>;
+        Relationships: [];
+      };
+      saved_places_analytics: {
+        Row: SavedPlaceAnalytics;
+        Insert: Omit<SavedPlaceAnalytics, "id" | "created_at">;
+        Update: Partial<Omit<SavedPlaceAnalytics, "id" | "created_at">>;
         Relationships: [];
       };
     };

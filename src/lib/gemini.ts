@@ -1,3 +1,4 @@
+import { repairJSON } from "@/lib/utils";
 import type {
   AnnouncementTranslations,
   NoteTranslations,
@@ -5,7 +6,6 @@ import type {
   SettingsTranslations,
 } from "@/types/database";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-
 // ─── Shared model instance ───────────────────────────────
 
 function getModel() {
@@ -49,7 +49,9 @@ Return ONLY valid JSON matching this exact shape (no markdown, no wrapping):
       },
     });
 
-    return JSON.parse(result.response.text()) as AnnouncementTranslations;
+    const text = result.response.text();
+    const cleaned = repairJSON(text);
+    return JSON.parse(cleaned) as AnnouncementTranslations;
   } catch (err) {
     console.error("[translateAnnouncement] failed:", err);
     return {};
@@ -86,7 +88,9 @@ Return ONLY valid JSON matching this exact shape (no markdown, no wrapping):
       },
     });
 
-    return JSON.parse(result.response.text()) as NoteTranslations;
+    const text = result.response.text();
+    const cleaned = repairJSON(text);
+    return JSON.parse(cleaned) as NoteTranslations;
   } catch (err) {
     console.error("[translateNote] failed:", err);
     return {};
@@ -127,7 +131,9 @@ Return ONLY valid JSON matching this exact shape (no markdown, no wrapping):
       },
     });
 
-    return JSON.parse(result.response.text()) as PartnerTranslations;
+    const text = result.response.text();
+    const cleaned = repairJSON(text);
+    return JSON.parse(cleaned) as PartnerTranslations;
   } catch (err) {
     console.error("[translatePartner] failed:", err);
     return {};
@@ -195,7 +201,9 @@ Only include the field keys that were provided above:
       },
     });
 
-    return JSON.parse(result.response.text()) as SettingsTranslations;
+    const text = result.response.text();
+    const cleaned = repairJSON(text);
+    return JSON.parse(cleaned) as SettingsTranslations;
   } catch (err) {
     console.error("[translateSettings] failed:", err);
     return {};
@@ -203,58 +211,3 @@ Only include the field keys that were provided above:
 }
 
 // ─── generateItinerary ───────────────────────────────────
-
-export async function generateItinerary(
-  campgroundName: string,
-  weatherState: string,
-  placesJson: any[],
-  lang: string,
-) {
-  const model = getModel();
-
-  const prompt = `
-    You are a friendly, expert local concierge for a camping site named "${campgroundName}".
-
-    CURRENT STATUS (Day, Date, Weather): ${weatherState}
-
-    Create a FULL DAY itinerary (morning, lunch, afternoon, evening) for a family staying at the campground.
-
-    CRITICAL RULES:
-    1. OPENING HOURS ARE STRICT: Look closely at the "openingHours" string for each place. If the place is closed on the current day, or closed at the specific "time" you are suggesting, YOU MUST NOT use it.
-    2. TIME LOGIC: If a place is open "10:00 - 18:00", do not schedule a visit at 19:00. Use 24-hour format for the "time" field (e.g., "13:00").
-    3. WEATHER LOGIC: If it's raining or cold, heavily prioritize places where "isIndoor" is true, or categories like 'museum', 'shopping', 'cafe', 'cinema'.
-    4. NO OPEN PLACES?: If no suitable places are open (e.g., late evening), schedule a cozy activity at the campground itself (e.g., "Grill marshmallows", "Play board games") and omit the "placeId" or set it to null.
-    5. LANGUAGE: Write the "title" and "description" natively and fluently in the language code: ${lang.toUpperCase()}. Make it sound warm and welcoming.
-
-    Available local places to pick from:
-    ${JSON.stringify(placesJson)}
-
-    IMPORTANT: Return ONLY a valid JSON array matching this exact format:
-    [
-      {
-        "time": "09:00",
-        "period": "morning",
-        "emoji": "☕",
-        "title": "Translated title here...",
-        "description": "Translated short description here...",
-        "placeId": "uuid-from-places-json-here"
-      }
-    ]
-  `;
-
-  const result = await model.generateContent({
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-    generationConfig: {
-      responseMimeType: "application/json",
-      temperature: 0.4,
-    },
-  });
-
-  const responseText = result.response.text();
-  try {
-    return JSON.parse(responseText);
-  } catch (e) {
-    console.error("Gemini didn't return valid JSON:", responseText);
-    return [];
-  }
-}

@@ -2,6 +2,7 @@
 "use server";
 
 import { getTodaysOpeningHours } from "@/lib/place-utils";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { CachedPlace, Campground, PlaceCategory } from "@/types/database";
 
@@ -110,8 +111,10 @@ async function cacheSet(
   l1.set(key, envelope);
 
   try {
-    const supabase = await createClient();
-    await supabase.from("plan_cache").upsert(
+    // SEC-001 FIX: Use Admin client for secure writes (bypasses RLS)
+    // Cast "plan_cache" as any to bypass strict type checking since it's omitted from Database types
+    const adminClient = createAdminClient();
+    await adminClient.from("plan_cache" as any).upsert(
       {
         cache_key: key,
         campground_id: extractCampIdFromKey(key),
@@ -135,9 +138,10 @@ async function cacheDeleteForWeatherChange(
   }
 
   try {
-    const supabase = await createClient();
-    await supabase
-      .from("plan_cache")
+    // SEC-001 FIX: Use Admin client to securely delete cache
+    const adminClient = createAdminClient();
+    await adminClient
+      .from("plan_cache" as any)
       .delete()
       .eq("campground_id", campId)
       .eq("date_str", date);
@@ -165,9 +169,10 @@ async function maybeCleanupStaleCache(): Promise<void> {
   lastCleanupDate = today;
 
   try {
-    const supabase = await createClient();
-    const { count } = await supabase
-      .from("plan_cache")
+    // SEC-001 FIX: Use Admin client to securely clean up stale cache
+    const adminClient = createAdminClient();
+    const { count } = await adminClient
+      .from("plan_cache" as any)
       .delete({ count: "exact" })
       .neq("date_str", today);
 

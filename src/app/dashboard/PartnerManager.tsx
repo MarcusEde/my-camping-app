@@ -22,6 +22,7 @@ import {
   Phone,
   Plus,
   Search,
+  Ticket,
   Trash2,
   X,
 } from "lucide-react";
@@ -88,6 +89,8 @@ export default function PartnerManager({
           onStartsAtChange={s.setNewStartsAt}
           endsAt={s.newEndsAt}
           onEndsAtChange={s.setNewEndsAt}
+          couponCode={s.newCouponCode}
+          onCouponCodeChange={s.setNewCouponCode}
           onSubmit={s.handleAdd}
           onCancel={s.resetAddForm}
         />
@@ -109,7 +112,7 @@ export default function PartnerManager({
                 return (
                   <div
                     key={partner.id}
-                    className="ring-1 ring-stone-200 rounded-[16px]"
+                    className="rounded-[16px] ring-1 ring-stone-200"
                   >
                     <PartnerForm
                       mode="edit"
@@ -134,6 +137,8 @@ export default function PartnerManager({
                       onStartsAtChange={s.setEditStartsAt}
                       endsAt={s.editEndsAt}
                       onEndsAtChange={s.setEditEndsAt}
+                      couponCode={s.editCouponCode}
+                      onCouponCodeChange={s.setEditCouponCode}
                       onSubmit={s.handleUpdate}
                       onCancel={s.handleCancelEdit}
                     />
@@ -245,7 +250,9 @@ function Toolbar({
           placeholder="Sök partners..."
           className="w-full rounded-[10px] bg-stone-50/80 py-2.5 pl-10 pr-4 text-[12px] font-medium text-stone-700 ring-1 ring-stone-200/60 placeholder:text-stone-300 focus:outline-none focus:ring-2"
           style={
-            { "--tw-ring-color": hexToRgba(brand, 0.25) } as React.CSSProperties
+            {
+              "--tw-ring-color": hexToRgba(brand, 0.25),
+            } as React.CSSProperties
           }
         />
       </div>
@@ -358,12 +365,22 @@ function PartnerCard({
           </div>
 
           {partner.description && (
-            <p className="mt-0.5 text-[11px] leading-relaxed text-stone-400 line-clamp-2">
+            <p className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-stone-400">
               {partner.description}
             </p>
           )}
 
-          <div className="mt-2">
+          {/* ── Coupon badge (owner view) ── */}
+          {partner.coupon_code && (
+            <div className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 ring-1 ring-amber-200/60">
+              <Ticket size={10} strokeWidth={2} className="text-amber-500" />
+              <span className="text-[10px] font-black tracking-wide text-amber-700">
+                {partner.coupon_code}
+              </span>
+            </div>
+          )}
+
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <div
               className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1"
               style={{ backgroundColor: hexToRgba(brand, 0.06) }}
@@ -437,6 +454,8 @@ interface PartnerFormProps {
   onStartsAtChange: (v: string) => void;
   endsAt: string;
   onEndsAtChange: (v: string) => void;
+  couponCode: string;
+  onCouponCodeChange: (v: string) => void;
   onSubmit: () => void;
   onCancel: () => void;
 }
@@ -464,6 +483,8 @@ function PartnerForm({
   onStartsAtChange,
   endsAt,
   onEndsAtChange,
+  couponCode,
+  onCouponCodeChange,
   onSubmit,
   onCancel,
 }: PartnerFormProps) {
@@ -514,6 +535,26 @@ function PartnerForm({
           className="w-full resize-none rounded-[10px] bg-white px-3.5 py-2.5 text-[12px] font-medium text-stone-800 ring-1 ring-stone-200/60 placeholder:text-stone-300 focus:outline-none focus:ring-2"
           style={ringStyle}
         />
+      </div>
+
+      {/* ── Coupon Code field ── */}
+      <div>
+        <label className="mb-1 flex items-center gap-1 text-[9px] font-black uppercase tracking-[0.2em] text-stone-300">
+          <Ticket size={10} />
+          Rabattkod (valfritt)
+        </label>
+        <input
+          type="text"
+          value={couponCode}
+          onChange={(e) => onCouponCodeChange(e.target.value.toUpperCase())}
+          placeholder='T.ex. "CAMPING20"'
+          className="w-full rounded-[10px] bg-white px-3.5 py-2.5 font-mono text-[12px] font-bold uppercase tracking-widest text-stone-800 ring-1 ring-stone-200/60 placeholder:font-sans placeholder:font-medium placeholder:normal-case placeholder:tracking-normal placeholder:text-stone-300 focus:outline-none focus:ring-2"
+          style={ringStyle}
+        />
+        <p className="mt-1 px-1 text-[10px] leading-relaxed text-stone-300">
+          Gäster klickar &quot;Hämta rabatt&quot; för att se koden — varje klick
+          spåras som en inlöst kupong.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">

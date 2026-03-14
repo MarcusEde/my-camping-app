@@ -1,11 +1,12 @@
 /**
  * google-places.ts
  * ─────────────────────────────────────────────────────────
- * Version 11.0 – Opening hours support + road distance sync.
+ * Version 12.0 – Filters out closed businesses.
  *
- * Key changes from v10:
- *   • syncRoadDistances()            – batch-sync all places for a campground
- *   • syncSinglePlaceRoadDistance()   – sync one place (used when adding)
+ * Key changes from v11:
+ *   • FIELD_MASK now requests `places.businessStatus`
+ *   • parsePlaces() rejects CLOSED_TEMPORARILY & CLOSED_PERMANENTLY
+ *   • GooglePlaceResult gains optional `business_status` field
  */
 
 import type { Database } from "@/types/database";
@@ -13,9 +14,31 @@ import { PlaceCategory } from "@/types/database";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getOSRMTableMetrics, type Coordinate } from "./routing";
 
+// ── Google Places API "businessStatus" enum ──────────────
+// https://developers.google.com/maps/documentation/places/web-service/reference/rest/v1/places#BusinessStatus
+//
+// OPERATIONAL            – Normal operation
+// CLOSED_TEMPORARILY     – Temporarily shut (seasonal, renovation, etc.)
+// CLOSED_PERMANENTLY     – Permanently closed / out of business
+//
+// Google may also return the field as absent/undefined for places
+// where the status is unknown (e.g., parks, nature areas). We
+// treat those as operational — safe default for non-commercial POIs.
+
+type GoogleBusinessStatus =
+  | "OPERATIONAL"
+  | "CLOSED_TEMPORARILY"
+  | "CLOSED_PERMANENTLY";
+
+const CLOSED_STATUSES: ReadonlySet<string> = new Set([
+  "CLOSED_TEMPORARILY",
+  "CLOSED_PERMANENTLY",
+]);
+
 interface GooglePlacesResponse {
   places?: any[];
 }
+
 export interface GooglePlaceResult {
   google_place_id: string;
   name: string;
@@ -26,9 +49,15 @@ export interface GooglePlaceResult {
   latitude: number;
   longitude: number;
   raw_data: any;
+  /** Google's operational status. Absent = assumed operational. */
+  business_status: GoogleBusinessStatus | null;
 }
 
-// ── CRITICAL: must include opening hours fields ──────────
+// ── FIELD MASK ───────────────────────────────────────────
+// CHANGED: Added "places.businessStatus" so Google returns
+// the operational status of each place. Without this field
+// in the mask, the API simply omits it from the response
+// and we have no way to know if a place is closed.
 const FIELD_MASK = [
   "places.id",
   "places.displayName",
@@ -38,6 +67,7 @@ const FIELD_MASK = [
   "places.location",
   "places.currentOpeningHours",
   "places.regularOpeningHours",
+  "places.businessStatus", // ← NEW in v12
 ].join(",");
 
 const TYPE_MAP: Record<string, { cat: PlaceCategory; indoor: boolean }> = {
@@ -193,38 +223,73 @@ function applySwedishOverrides(
   return { cat, indoor };
 }
 
+// ── CHANGED: parsePlaces now filters out closed businesses ──
+//
+// Flow:
+//   1. Map raw Google responses to GooglePlaceResult objects
+//   2. Filter: reject any place where businessStatus is in CLOSED_STATUSES
+//   3. Return only operational (or status-unknown) places
+//
+// Why filter instead of flag?
+//   A "Permanently Closed" restaurant has zero value to a camping
+//   guest. Showing it with a "closed" badge still wastes a card
+//   slot in the horizontal scroll row, pushing useful places off-
+//   screen. Better to remove them entirely and let the next
+//   operational place take the slot.
+
 function parsePlaces(
   rawPlaces: any[],
   categoryFallback: PlaceCategory,
 ): GooglePlaceResult[] {
-  return rawPlaces.map((place: any) => {
-    const types: string[] = place.types || [];
-    const name: string = place.displayName?.text || "";
+  return rawPlaces
+    .map((place: any) => {
+      const types: string[] = place.types || [];
+      const name: string = place.displayName?.text || "";
 
-    const mapping = types.reduce(
-      (acc: { cat: PlaceCategory; indoor: boolean } | null, t: string) =>
-        acc || TYPE_MAP[t] || null,
-      null,
-    );
-    let cat = mapping?.cat ?? categoryFallback;
-    let indoor = mapping?.indoor ?? false;
+      const mapping = types.reduce(
+        (acc: { cat: PlaceCategory; indoor: boolean } | null, t: string) =>
+          acc || TYPE_MAP[t] || null,
+        null,
+      );
+      let cat = mapping?.cat ?? categoryFallback;
+      let indoor = mapping?.indoor ?? false;
 
-    const override = applySwedishOverrides(name, cat, indoor);
-    cat = override.cat;
-    indoor = override.indoor;
+      const override = applySwedishOverrides(name, cat, indoor);
+      cat = override.cat;
+      indoor = override.indoor;
 
-    return {
-      google_place_id: place.id,
-      name,
-      address: place.formattedAddress || null,
-      rating: place.rating || null,
-      category: cat,
-      is_indoor: indoor,
-      latitude: place.location.latitude,
-      longitude: place.location.longitude,
-      raw_data: place,
-    };
-  });
+      // Extract businessStatus (may be undefined for parks, nature, etc.)
+      const businessStatus: GoogleBusinessStatus | null =
+        place.businessStatus ?? null;
+
+      return {
+        google_place_id: place.id,
+        name,
+        address: place.formattedAddress || null,
+        rating: place.rating || null,
+        category: cat,
+        is_indoor: indoor,
+        latitude: place.location.latitude,
+        longitude: place.location.longitude,
+        raw_data: place,
+        business_status: businessStatus,
+      };
+    })
+    .filter((result) => {
+      // ── Reject closed places ─────────────────────────────────
+      // If businessStatus is null/undefined → treat as operational
+      // (Google omits the field for non-commercial POIs like parks)
+      if (
+        result.business_status &&
+        CLOSED_STATUSES.has(result.business_status)
+      ) {
+        console.log(
+          `[google-places] Filtered out "${result.name}" — status: ${result.business_status}`,
+        );
+        return false;
+      }
+      return true;
+    });
 }
 
 export async function fetchPlacesNearby(
@@ -328,16 +393,8 @@ export async function fetchPlacesByText(
   }
 }
 
-// ─── Road-distance sync (NEW in v11) ─────────────────────
+// ─── Road-distance sync ──────────────────────────────────
 
-/**
- * Batch-sync OSRM road distances for every cached_place of a
- * campground.  By default only processes rows where
- * road_distance_km IS NULL (incremental).  Pass `force = true`
- * to re-calculate all.
- *
- * Call this at the end of your place-sync job / admin action.
- */
 export async function syncRoadDistances(
   supabase: SupabaseClient<Database>,
   campgroundId: string,
@@ -379,7 +436,6 @@ export async function syncRoadDistances(
   let synced = 0;
   let failed = 0;
 
-  // Fire all updates in parallel (they're tiny single-row writes)
   await Promise.all(
     places.map(async (place, idx) => {
       const km = metrics[idx]?.distance_km ?? null;
@@ -397,7 +453,6 @@ export async function syncRoadDistances(
       } else if (km != null) {
         synced++;
       } else {
-        // OSRM returned null for this place (unreachable / no route)
         failed++;
       }
     }),
@@ -409,12 +464,6 @@ export async function syncRoadDistances(
   return { synced, failed };
 }
 
-/**
- * Compute and persist the road distance for a single place.
- * Useful when a new place is added individually.
- *
- * Returns the distance in km, or null if OSRM could not route.
- */
 export async function syncSinglePlaceRoadDistance(
   supabase: SupabaseClient<Database>,
   placeId: string,

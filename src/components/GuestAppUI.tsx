@@ -30,7 +30,7 @@ import {
   getWelcomeLabel,
   navLabels,
   weatherConditions,
-  weatherLabels
+  weatherLabels,
 } from "@/lib/translations";
 import { hexToRgba } from "@/lib/utils";
 
@@ -70,6 +70,11 @@ export default function GuestAppUI({
     scrollRef,
     switchTab,
     handleDirectionsClick,
+    // ── Saved items (My Stay) ──
+    savedIds,
+    toggleSaved,
+    isSaved,
+    removeSaved,
   } = useGuestApp({
     campground,
     places,
@@ -137,6 +142,8 @@ export default function GuestAppUI({
                     distanceMap={distanceMap}
                     internalLocations={internalLocations}
                     onDirectionsClick={handleDirectionsClick}
+                    savedIds={savedIds}
+                    removeSaved={removeSaved}
                   />
                 )}
                 {activeTab === "utforska" && (
@@ -146,6 +153,8 @@ export default function GuestAppUI({
                     lang={lang}
                     distanceMap={distanceMap}
                     onDirectionsClick={handleDirectionsClick}
+                    isSaved={isSaved}
+                    toggleSaved={toggleSaved}
                   />
                 )}
                 {activeTab === "planerare" && (
@@ -155,6 +164,8 @@ export default function GuestAppUI({
                     weather={weather}
                     lang={lang}
                     distanceMap={distanceMap}
+                    isSaved={isSaved}
+                    toggleSaved={toggleSaved}
                   />
                 )}
                 {activeTab === "aktiviteter" && (
@@ -166,7 +177,11 @@ export default function GuestAppUI({
                   />
                 )}
                 {activeTab === "info" && (
-                  <InfoTab campground={campground} lang={lang} />
+                  <InfoTab
+                    campground={campground}
+                    lang={lang}
+                    sessionId={sessionId}
+                  />
                 )}
               </motion.div>
             </AnimatePresence>

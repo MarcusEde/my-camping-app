@@ -27,6 +27,7 @@ import {
   Clock,
   CloudRain,
   ExternalLink,
+  Heart,
   MapPin,
   Sparkles,
   Star,
@@ -39,6 +40,8 @@ interface Props {
   weather?: WeatherProp | null;
   lang: Lang;
   distanceMap: RoadDistanceMap;
+  isSaved?: (id: string) => boolean;
+  toggleSaved?: (id: string) => void;
 }
 
 export default function PlanerarenTab({
@@ -47,6 +50,8 @@ export default function PlanerarenTab({
   weather,
   lang,
   distanceMap,
+  isSaved,
+  toggleSaved,
 }: Props) {
   const brand = campground.primary_color || "#2A3C34";
   const l = plannerLabels[lang];
@@ -103,6 +108,8 @@ export default function PlanerarenTab({
           distanceMap={distanceMap}
           periodName={periodName}
           getMapUrl={getMapUrl}
+          isSaved={isSaved}
+          toggleSaved={toggleSaved}
         />
       )}
     </motion.div>
@@ -253,6 +260,8 @@ function Timeline({
   distanceMap,
   periodName,
   getMapUrl,
+  isSaved,
+  toggleSaved,
 }: {
   enriched: EnrichedItem[];
   hasPast: boolean;
@@ -264,6 +273,8 @@ function Timeline({
   distanceMap: RoadDistanceMap;
   periodName: (p: string) => string;
   getMapUrl: (placeId?: string) => string | null;
+  isSaved?: (id: string) => boolean;
+  toggleSaved?: (id: string) => void;
 }) {
   return (
     <div className="relative">
@@ -293,6 +304,8 @@ function Timeline({
             distanceMap={distanceMap}
             periodName={periodName}
             mapUrl={getMapUrl(item.placeId)}
+            isSaved={isSaved}
+            toggleSaved={toggleSaved}
           />
         ))}
       </motion.div>
@@ -354,6 +367,8 @@ function TimelineEntry({
   distanceMap,
   periodName,
   mapUrl,
+  isSaved,
+  toggleSaved,
 }: {
   item: EnrichedItem;
   idx: number;
@@ -366,10 +381,14 @@ function TimelineEntry({
   distanceMap: RoadDistanceMap;
   periodName: (p: string) => string;
   mapUrl: string | null;
+  isSaved?: (id: string) => boolean;
+  toggleSaved?: (id: string) => void;
 }) {
   const s = PERIOD_STYLES[item.period] ?? PERIOD_STYLES.morning;
   const place = item.placeId ? places.find((x) => x.id === item.placeId) : null;
   const { dimmed } = item;
+
+  const placeIsSaved = item.placeId && isSaved ? isSaved(item.placeId) : false;
 
   return (
     <div>
@@ -411,12 +430,56 @@ function TimelineEntry({
           transition={SPRING_TAP}
         >
           <div className="p-4">
-            <ItemMeta
-              time={item.time}
-              period={periodName(item.period)}
-              dimmed={dimmed}
-              periodStyle={s}
-            />
+            {/* Top row: meta + heart */}
+            <div className="mb-2 flex items-start justify-between">
+              <ItemMeta
+                time={item.time}
+                period={periodName(item.period)}
+                dimmed={dimmed}
+                periodStyle={s}
+              />
+
+              {/* Heart toggle — only when there's a linked place and not dimmed */}
+              {item.placeId && !dimmed && toggleSaved && (
+                <motion.button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleSaved(item.placeId!);
+                  }}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
+                  style={{
+                    backgroundColor: placeIsSaved
+                      ? hexToRgba("#ef4444", 0.08)
+                      : "rgba(0,0,0,0.03)",
+                  }}
+                  whileTap={{ scale: 0.8 }}
+                  transition={{
+                    type: "spring",
+                    stiffness: 440,
+                    damping: 24,
+                  }}
+                  aria-label={
+                    placeIsSaved ? "Remove from My Stay" : "Save to My Stay"
+                  }
+                >
+                  <motion.div
+                    animate={
+                      placeIsSaved ? { scale: [1, 1.3, 1] } : { scale: 1 }
+                    }
+                    transition={{ duration: 0.3, ease: "easeOut" }}
+                  >
+                    <Heart
+                      size={13}
+                      strokeWidth={2}
+                      fill={placeIsSaved ? "#ef4444" : "none"}
+                      className={
+                        placeIsSaved ? "text-red-500" : "text-stone-300"
+                      }
+                    />
+                  </motion.div>
+                </motion.button>
+              )}
+            </div>
 
             {place && !dimmed && (
               <div className="mb-2 flex justify-end">
@@ -515,7 +578,7 @@ function ItemMeta({
   periodStyle: (typeof PERIOD_STYLES)[string];
 }) {
   return (
-    <div className="mb-2 flex items-center gap-2">
+    <div className="flex items-center gap-2">
       <div
         className={`flex items-center gap-1 ${dimmed ? "text-stone-400" : "text-stone-700"}`}
       >
@@ -618,10 +681,6 @@ function DirectionsButton({
 
 /* ── Opening hours helpers ───────────────────────────── */
 
-/**
- * Parse "HH:MM–HH:MM" style time ranges from opening hours text.
- * Handles common Swedish/European formats.
- */
 function parseHoursRange(text: string): { open: number; close: number } | null {
   if (!text) return null;
 
@@ -641,13 +700,11 @@ function parseHoursRange(text: string): { open: number; close: number } | null {
   return null;
 }
 
-/** Get current hour as decimal (e.g. 14.5 = 14:30) */
 function currentHourDecimal(): number {
   const now = new Date();
   return now.getHours() + now.getMinutes() / 60;
 }
 
-/** Format a decimal hour as "HH:MM" */
 function formatHourAsTime(h: number): string {
   const hrs = Math.floor(h);
   const mins = Math.round((h - hrs) * 60);
@@ -662,33 +719,23 @@ type BadgeStatus =
   | { type: "closed" }
   | { type: "unknown" };
 
-/**
- * Three-state badge logic:
- *   🟢 "Öppet"        — open right now
- *   🟡 "Öppnar HH:MM" — closed now, opens before/at scheduled time
- *   🔴 "Stängt"        — closed now AND at scheduled time
- */
 function getPlaceStatus(
   place: CachedPlace,
   scheduledTime?: string,
 ): BadgeStatus {
-  // Get opening hours data
   const hoursData = place.custom_hours
     ? { isOpenNow: false, text: place.custom_hours }
     : getTodaysOpeningHours(place.raw_data);
 
-  // No hours info at all — don't show badge
   if (!hoursData) return { type: "unknown" };
 
   const hoursText = hoursData.text ?? place.custom_hours ?? "";
   const range = parseHoursRange(hoursText);
 
-  // Explicitly closed today
   if (/closed|stängt|geschlossen|lukket/i.test(hoursText)) {
     return { type: "closed" };
   }
 
-  // No parseable range — trust the isOpenNow flag if available
   if (!range) {
     if (hoursData.isOpenNow) return { type: "open" };
     return { type: "unknown" };
@@ -696,26 +743,22 @@ function getPlaceStatus(
 
   const now = currentHourDecimal();
 
-  // Currently open
   if (now >= range.open && now < range.close) {
     return { type: "open" };
   }
 
-  // Currently closed — check if it'll be open at scheduled time
   if (scheduledTime) {
     const timeParts = scheduledTime.match(/^(\d{1,2}):(\d{2})$/);
     if (timeParts) {
       const scheduledHour =
         parseInt(timeParts[1]) + parseInt(timeParts[2]) / 60;
 
-      // Place opens before or at the scheduled time, and is still open then
       if (scheduledHour >= range.open && scheduledHour < range.close) {
         return { type: "opens_at", time: formatHourAsTime(range.open) };
       }
     }
   }
 
-  // Closed now and at scheduled time
   return { type: "closed" };
 }
 

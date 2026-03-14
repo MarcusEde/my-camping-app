@@ -1,5 +1,6 @@
 "use server";
 
+import { requireCampground } from "@/lib/auth-guard";
 import {
   translateAnnouncement,
   translateNote,
@@ -11,9 +12,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
-/**
- * 📏 VALIDATION SCHEMAS
- */
+// ═══════════════════════════════════════════════════════════════════════════
+// 📏 VALIDATION SCHEMAS (unchanged)
+// ═══════════════════════════════════════════════════════════════════════════
 
 const CampgroundSettingsSchema = z.object({
   primary_color: z
@@ -71,44 +72,28 @@ const PartnerSchema = z.object({
     (val) => (val === "" ? null : val),
     z.string().datetime().nullable().optional(),
   ),
+  coupon_code: z.string().max(50).nullable().optional(),
 });
 
-/**
- * 🔐 SECURITY HELPER
- */
-async function verifyOwnership(campgroundId: string) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+const FacilitySchema = z.object({
+  name: z.string().min(1, "Namn krävs").max(100, "Max 100 tecken"),
+  type: z.string().min(1, "Typ krävs").max(50),
+  walking_minutes: z.number().int().min(0).max(30),
+  is_active: z.boolean(),
+});
 
-  if (!user) throw new Error("Du måste vara inloggad.");
+const UpdatePlaceDetailsSchema = z.object({
+  is_on_site: z.boolean().optional(),
+  is_indoor: z.boolean().optional(),
+  custom_hours: z.string().max(255, "Max 255 tecken").nullable().optional(),
+});
 
-  const { data: camp, error } = await supabase
-    .from("campgrounds")
-    .select(
-      "id, slug, owner_id, check_out_info, trash_rules, emergency_info, camp_rules, reception_hours, subscription_status",
-    )
-    .eq("id", campgroundId)
-    .single();
-
-  if (error || !camp) throw new Error("Campingen hittades inte.");
-  if (camp.owner_id !== user.id) throw new Error("Behörighet saknas.");
-
-  if (
-    camp.subscription_status === "inactive" ||
-    camp.subscription_status === "cancelled"
-  ) {
-    throw new Error(
-      "Konto inaktivt eller avslutat. Inga ändringar kan sparas.",
-    );
-  }
-
-  return { supabase, camp };
-}
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔄 HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * 🔄 CACHE HELPER
+ * Revalidates dashboard and public-facing cache.
  */
 function revalidateAll(slug?: string) {
   revalidatePath("/dashboard");
@@ -119,9 +104,7 @@ function revalidateAll(slug?: string) {
 }
 
 /**
- * 🌐 SAFE TRANSLATION HELPER
- * Wraps translation calls so they never crash the parent action.
- * On failure, returns null (caller inserts without translations).
+ * Safe translation wrappers — never crash the parent action.
  */
 async function safeTranslateAnnouncement(
   title: string,
@@ -158,14 +141,20 @@ async function safeTranslatePartner(
   }
 }
 
-// ━━━ AUTH ━━━
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔓 AUTH
+// ═══════════════════════════════════════════════════════════════════════════
+
 export async function logout() {
   const supabase = await createClient();
   await supabase.auth.signOut();
   redirect("/login");
 }
 
-// ━━━ CAMPGROUND SETTINGS ━━━
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚙️ CAMPGROUND SETTINGS
+// ═══════════════════════════════════════════════════════════════════════════
+
 export async function updateCampgroundSettings(
   campgroundId: string,
   rawData: unknown,
@@ -176,7 +165,12 @@ export async function updateCampgroundSettings(
   }
 
   const data = validated.data;
-  const { supabase, camp } = await verifyOwnership(campgroundId);
+
+  // requireCampground replaces verifyOwnership:
+  // - Validates JWT
+  // - RLS scopes the SELECT to owner's campground only
+  // - Checks subscription_status (business logic)
+  const { supabase, campground } = await requireCampground(campgroundId);
 
   const translatableFields = {
     check_out_info: data.check_out_info || null,
@@ -187,11 +181,11 @@ export async function updateCampgroundSettings(
   };
 
   const textChanged =
-    (data.check_out_info ?? null) !== (camp.check_out_info ?? null) ||
-    (data.trash_rules ?? null) !== (camp.trash_rules ?? null) ||
-    (data.emergency_info ?? null) !== (camp.emergency_info ?? null) ||
-    (data.camp_rules ?? null) !== (camp.camp_rules ?? null) ||
-    (data.reception_hours ?? null) !== (camp.reception_hours ?? null);
+    (data.check_out_info ?? null) !== (campground.check_out_info ?? null) ||
+    (data.trash_rules ?? null) !== (campground.trash_rules ?? null) ||
+    (data.emergency_info ?? null) !== (campground.emergency_info ?? null) ||
+    (data.camp_rules ?? null) !== (campground.camp_rules ?? null) ||
+    (data.reception_hours ?? null) !== (campground.reception_hours ?? null);
 
   const hasTranslatableContent = Object.values(translatableFields).some(
     (v) => typeof v === "string" && v.trim().length > 0,
@@ -207,7 +201,6 @@ export async function updateCampgroundSettings(
         settingsTranslationsUpdate = settingsTranslations;
       } catch (err) {
         console.error("[Translation] Settings translation failed:", err);
-        // Don't block save — just skip translations
       }
     } else {
       settingsTranslationsUpdate = {};
@@ -236,18 +229,23 @@ export async function updateCampgroundSettings(
     updatePayload.settings_translations = settingsTranslationsUpdate;
   }
 
+  // RLS enforces: only rows where owner_id = auth.uid() can be updated.
+  // The .eq("id", campground.id) is belt-and-suspenders — campground.id
+  // already came from an RLS-scoped query, so this is guaranteed safe.
   const { error } = await supabase
     .from("campgrounds")
     .update(updatePayload)
-    .eq("id", campgroundId);
+    .eq("id", campground.id);
 
   if (error) throw new Error(error.message);
 
-  revalidateAll(camp.slug);
+  revalidateAll(campground.slug);
   return { success: true };
 }
 
-// ━━━ ANNOUNCEMENTS ━━━
+// ═══════════════════════════════════════════════════════════════════════════
+// 📢 ANNOUNCEMENTS
+// ═══════════════════════════════════════════════════════════════════════════
 
 export async function createAnnouncement(
   campgroundId: string,
@@ -258,19 +256,18 @@ export async function createAnnouncement(
   const validated = AnnouncementSchema.safeParse({ title, content, type });
   if (!validated.success) throw new Error(validated.error.issues[0].message);
 
-  const { supabase, camp } = await verifyOwnership(campgroundId);
+  const { supabase, campground } = await requireCampground(campgroundId);
 
   const trimmedTitle = validated.data.title.trim();
   const trimmedContent = validated.data.content.trim();
 
-  // Translation is non-blocking — announcement is saved even if it fails
   const translations = await safeTranslateAnnouncement(
     trimmedTitle,
     trimmedContent,
   );
 
   const insertPayload: Record<string, unknown> = {
-    campground_id: campgroundId,
+    campground_id: campground.id, // Always from the RLS-verified session
     title: trimmedTitle,
     content: trimmedContent,
     type: validated.data.type,
@@ -279,12 +276,16 @@ export async function createAnnouncement(
     insertPayload.translations = translations;
   }
 
+  // RLS WITH CHECK: user_owns_campground(campground_id) must be true.
+  // Since campground.id came from requireCampground, this always passes.
+  // If someone tampered with campgroundId in the form, requireCampground
+  // would have returned 0 rows and redirected to /onboarding.
   const { error } = await supabase
     .from("announcements")
     .insert([insertPayload]);
 
   if (error) throw new Error(error.message);
-  revalidateAll(camp.slug);
+  revalidateAll(campground.slug);
   return { success: true };
 }
 
@@ -297,20 +298,12 @@ export async function updateAnnouncement(
   const validated = AnnouncementSchema.safeParse({ title, content, type });
   if (!validated.success) throw new Error(validated.error.issues[0].message);
 
-  const supabase = await createClient();
-  const { data: ann } = await supabase
-    .from("announcements")
-    .select("campground_id")
-    .eq("id", announcementId)
-    .single();
-  if (!ann) throw new Error("Hittades ej.");
-
-  const { camp } = await verifyOwnership(ann.campground_id);
+  // Authenticate + get campground (we need slug for revalidation)
+  const { supabase, campground } = await requireCampground();
 
   const trimmedTitle = validated.data.title.trim();
   const trimmedContent = validated.data.content.trim();
 
-  // Translation is non-blocking
   const translations = await safeTranslateAnnouncement(
     trimmedTitle,
     trimmedContent,
@@ -325,122 +318,108 @@ export async function updateAnnouncement(
     updatePayload.translations = translations;
   }
 
-  const { error } = await supabase
+  // RLS USING: user_owns_campground(campground_id). If this announcement
+  // belongs to another tenant, RLS returns 0 rows → update affects nothing.
+  // The .eq("campground_id") is defense-in-depth.
+  const { data, error } = await supabase
     .from("announcements")
     .update(updatePayload)
-    .eq("id", announcementId);
+    .eq("id", announcementId)
+    .eq("campground_id", campground.id)
+    .select("id")
+    .maybeSingle();
 
   if (error) throw new Error(error.message);
-  revalidateAll(camp.slug);
+  if (!data) throw new Error("Meddelandet hittades inte.");
+
+  revalidateAll(campground.slug);
   return { success: true };
 }
 
 export async function deleteAnnouncement(announcementId: string) {
-  const supabase = await createClient();
-  const { data: ann } = await supabase
-    .from("announcements")
-    .select("campground_id")
-    .eq("id", announcementId)
-    .single();
-  if (!ann) throw new Error("Hittades ej.");
+  const { supabase, campground } = await requireCampground();
 
-  const { camp } = await verifyOwnership(ann.campground_id);
-
+  // RLS prevents deleting another tenant's rows. Defense-in-depth filter:
   const { error } = await supabase
     .from("announcements")
     .delete()
-    .eq("id", announcementId);
+    .eq("id", announcementId)
+    .eq("campground_id", campground.id);
+
   if (error) throw new Error(error.message);
 
-  revalidateAll(camp.slug);
+  revalidateAll(campground.slug);
   return { success: true };
 }
 
-// ━━━ PLACES (DISCOVERY) ━━━
+// ═══════════════════════════════════════════════════════════════════════════
+// 📍 PLACES (DISCOVERY)
+// ═══════════════════════════════════════════════════════════════════════════
 
 export async function togglePin(placeId: string, currentState: boolean) {
-  const supabase = await createClient();
-  const { data: place } = await supabase
-    .from("cached_places")
-    .select("campground_id")
-    .eq("id", placeId)
-    .single();
-  if (!place) throw new Error("Platsen saknas.");
+  const { supabase, campground } = await requireCampground();
 
-  const { camp } = await verifyOwnership(place.campground_id);
-
-  const { error } = await supabase
+  // RLS scopes this: if placeId doesn't belong to our campground, 0 rows.
+  const { data, error } = await supabase
     .from("cached_places")
     .update({ is_pinned: !currentState })
-    .eq("id", placeId);
+    .eq("id", placeId)
+    .eq("campground_id", campground.id)
+    .select("id")
+    .maybeSingle();
 
   if (error) throw new Error(error.message);
-  revalidateAll(camp.slug);
+  if (!data) throw new Error("Platsen hittades inte.");
+
+  revalidateAll(campground.slug);
 }
 
 export async function toggleHide(placeId: string, currentState: boolean) {
-  const supabase = await createClient();
-  const { data: place } = await supabase
-    .from("cached_places")
-    .select("campground_id")
-    .eq("id", placeId)
-    .single();
-  if (!place) throw new Error("Platsen saknas.");
+  const { supabase, campground } = await requireCampground();
 
-  const { camp } = await verifyOwnership(place.campground_id);
-
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("cached_places")
     .update({ is_hidden: !currentState })
-    .eq("id", placeId);
+    .eq("id", placeId)
+    .eq("campground_id", campground.id)
+    .select("id")
+    .maybeSingle();
 
   if (error) throw new Error(error.message);
-  revalidateAll(camp.slug);
+  if (!data) throw new Error("Platsen hittades inte.");
+
+  revalidateAll(campground.slug);
 }
 
 export async function saveNote(placeId: string, note: string) {
-  const supabase = await createClient();
-  const { data: place } = await supabase
-    .from("cached_places")
-    .select("campground_id")
-    .eq("id", placeId)
-    .single();
-  if (!place) throw new Error("Platsen saknas.");
-
-  const { camp } = await verifyOwnership(place.campground_id);
+  const { supabase, campground } = await requireCampground();
 
   const trimmedNote = note.trim();
 
-  if (trimmedNote) {
-    // Translation is non-blocking
-    const noteTranslations = await safeTranslateNote(trimmedNote);
+  let updatePayload: Record<string, unknown>;
 
-    const updatePayload: Record<string, unknown> = {
-      owner_note: trimmedNote,
-    };
+  if (trimmedNote) {
+    const noteTranslations = await safeTranslateNote(trimmedNote);
+    updatePayload = { owner_note: trimmedNote };
     if (noteTranslations) {
       updatePayload.note_translations = noteTranslations;
     }
-
-    const { error } = await supabase
-      .from("cached_places")
-      .update(updatePayload)
-      .eq("id", placeId);
-
-    if (error) throw new Error(error.message);
   } else {
-    const { error } = await supabase
-      .from("cached_places")
-      .update({
-        owner_note: null,
-        note_translations: null,
-      })
-      .eq("id", placeId);
-
-    if (error) throw new Error(error.message);
+    updatePayload = { owner_note: null, note_translations: null };
   }
 
-  revalidateAll(camp.slug);
+  const { data, error } = await supabase
+    .from("cached_places")
+    .update(updatePayload)
+    .eq("id", placeId)
+    .eq("campground_id", campground.id)
+    .select("id")
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Platsen hittades inte.");
+
+  revalidateAll(campground.slug);
 }
 
 export async function addCustomPlace(
@@ -462,9 +441,8 @@ export async function addCustomPlace(
   });
   if (!validated.success) throw new Error(validated.error.issues[0].message);
 
-  const { supabase, camp } = await verifyOwnership(campgroundId);
+  const { supabase, campground } = await requireCampground(campgroundId);
 
-  // Use explicit isIndoor from the form. Only auto-detect if not provided.
   const indoor =
     validated.data.isIndoor ??
     ["bowling", "museum", "cinema", "spa", "shopping"].includes(
@@ -473,7 +451,7 @@ export async function addCustomPlace(
 
   const { error } = await supabase.from("cached_places").insert([
     {
-      campground_id: campgroundId,
+      campground_id: campground.id, // Always from RLS-verified session
       name: validated.data.name.trim(),
       category: validated.data.category,
       address: validated.data.address?.trim() || null,
@@ -487,27 +465,23 @@ export async function addCustomPlace(
   ]);
 
   if (error) throw new Error(error.message);
-  revalidateAll(camp.slug);
+  revalidateAll(campground.slug);
   return { success: true };
 }
 
 export async function updatePlaceDetails(
   placeId: string,
-  data: {
+  rawData: {
     is_on_site?: boolean;
     is_indoor?: boolean;
     custom_hours?: string | null;
   },
 ) {
-  const supabase = await createClient();
-  const { data: place } = await supabase
-    .from("cached_places")
-    .select("campground_id")
-    .eq("id", placeId)
-    .single();
-  if (!place) throw new Error("Platsen saknas.");
+  const validated = UpdatePlaceDetailsSchema.safeParse(rawData);
+  if (!validated.success) throw new Error(validated.error.issues[0].message);
 
-  const { camp } = await verifyOwnership(place.campground_id);
+  const data = validated.data;
+  const { supabase, campground } = await requireCampground();
 
   const updatePayload: Record<string, unknown> = {};
   if (data.is_on_site !== undefined) updatePayload.is_on_site = data.is_on_site;
@@ -515,40 +489,52 @@ export async function updatePlaceDetails(
   if (data.custom_hours !== undefined)
     updatePayload.custom_hours = data.custom_hours;
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("cached_places")
     .update(updatePayload)
-    .eq("id", placeId);
+    .eq("id", placeId)
+    .eq("campground_id", campground.id)
+    .select("id")
+    .maybeSingle();
 
   if (error) throw new Error(error.message);
-  revalidateAll(camp.slug);
+  if (!updated) throw new Error("Platsen hittades inte.");
+
+  revalidateAll(campground.slug);
   return { success: true };
 }
 
 export async function deletePlace(placeId: string) {
-  const supabase = await createClient();
+  const { supabase, campground } = await requireCampground();
+
+  // First check if it's a synced place (business rule, not security)
+  // RLS scopes this SELECT to our campground only
   const { data: place } = await supabase
     .from("cached_places")
-    .select("campground_id, google_place_id")
+    .select("id, google_place_id")
     .eq("id", placeId)
-    .single();
-  if (!place) throw new Error("Platsen saknas.");
+    .eq("campground_id", campground.id)
+    .maybeSingle();
 
-  const { camp } = await verifyOwnership(place.campground_id);
+  if (!place) throw new Error("Platsen hittades inte.");
 
-  if (place.google_place_id)
+  if (place.google_place_id) {
     throw new Error("Kan ej ta bort synkade platser. Dölj dem istället.");
+  }
 
   const { error } = await supabase
     .from("cached_places")
     .delete()
-    .eq("id", placeId);
-  if (error) throw new Error(error.message);
+    .eq("id", placeId)
+    .eq("campground_id", campground.id);
 
-  revalidateAll(camp.slug);
+  if (error) throw new Error(error.message);
+  revalidateAll(campground.slug);
 }
 
-// ━━━ PROMOTED PARTNERS ━━━
+// ═══════════════════════════════════════════════════════════════════════════
+// 🤝 PROMOTED PARTNERS
+// ═══════════════════════════════════════════════════════════════════════════
 
 export async function createPromotedPartner(
   campgroundId: string,
@@ -557,7 +543,7 @@ export async function createPromotedPartner(
   const validated = PartnerSchema.safeParse(rawData);
   if (!validated.success) throw new Error(validated.error.issues[0].message);
 
-  const { supabase, camp } = await verifyOwnership(campgroundId);
+  const { supabase, campground } = await requireCampground(campgroundId);
   const data = validated.data;
 
   const translations = await safeTranslatePartner(
@@ -566,7 +552,7 @@ export async function createPromotedPartner(
   );
 
   const insertPayload: Record<string, unknown> = {
-    campground_id: campgroundId,
+    campground_id: campground.id,
     business_name: data.business_name.trim(),
     description: data.description?.trim() || null,
     website_url: data.website_url?.trim() || null,
@@ -577,6 +563,7 @@ export async function createPromotedPartner(
     is_active: true,
     starts_at: data.starts_at || new Date().toISOString(),
     ends_at: data.ends_at || null,
+    coupon_code: data.coupon_code?.trim() || null,
   };
   if (translations) {
     insertPayload.translations = translations;
@@ -587,7 +574,7 @@ export async function createPromotedPartner(
     .insert([insertPayload]);
 
   if (error) throw new Error(error.message);
-  revalidateAll(camp.slug);
+  revalidateAll(campground.slug);
   return { success: true };
 }
 
@@ -599,16 +586,18 @@ export async function updatePromotedPartner(
   if (!validated.success) throw new Error(validated.error.issues[0].message);
 
   const data = validated.data;
-  const supabase = await createClient();
+  const { supabase, campground } = await requireCampground();
 
+  // Fetch current partner data for translation change detection
+  // RLS scopes this: only returns if partner belongs to our campground
   const { data: partner } = await supabase
     .from("promoted_partners")
-    .select("campground_id, business_name, description")
+    .select("business_name, description")
     .eq("id", partnerId)
-    .single();
+    .eq("campground_id", campground.id)
+    .maybeSingle();
 
-  if (!partner) throw new Error("Partner saknas.");
-  const { camp } = await verifyOwnership(partner.campground_id);
+  if (!partner) throw new Error("Partner hittades inte.");
 
   const nameChanged =
     data.business_name !== undefined &&
@@ -621,6 +610,10 @@ export async function updatePromotedPartner(
     ...data,
     business_name: data.business_name?.trim(),
   };
+
+  if (data.coupon_code !== undefined) {
+    updatePayload.coupon_code = data.coupon_code?.trim() || null;
+  }
 
   if (nameChanged || descChanged) {
     const newTranslations = await safeTranslatePartner(
@@ -635,10 +628,11 @@ export async function updatePromotedPartner(
   const { error } = await supabase
     .from("promoted_partners")
     .update(updatePayload)
-    .eq("id", partnerId);
+    .eq("id", partnerId)
+    .eq("campground_id", campground.id);
 
   if (error) throw new Error(error.message);
-  revalidateAll(camp.slug);
+  revalidateAll(campground.slug);
   return { success: true };
 }
 
@@ -646,105 +640,96 @@ export async function togglePromotedPartnerActive(
   partnerId: string,
   currentState: boolean,
 ) {
-  const supabase = await createClient();
-  const { data: partner } = await supabase
-    .from("promoted_partners")
-    .select("campground_id")
-    .eq("id", partnerId)
-    .single();
-  if (!partner) throw new Error("Partner saknas.");
+  const { supabase, campground } = await requireCampground();
 
-  const { camp } = await verifyOwnership(partner.campground_id);
-
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("promoted_partners")
     .update({ is_active: !currentState })
-    .eq("id", partnerId);
+    .eq("id", partnerId)
+    .eq("campground_id", campground.id)
+    .select("id")
+    .maybeSingle();
 
   if (error) throw new Error(error.message);
-  revalidateAll(camp.slug);
+  if (!data) throw new Error("Partner hittades inte.");
+
+  revalidateAll(campground.slug);
 }
 
 export async function deletePromotedPartner(partnerId: string) {
-  const supabase = await createClient();
-  const { data: partner } = await supabase
-    .from("promoted_partners")
-    .select("campground_id")
-    .eq("id", partnerId)
-    .single();
-  if (!partner) throw new Error("Partner saknas.");
-
-  const { camp } = await verifyOwnership(partner.campground_id);
+  const { supabase, campground } = await requireCampground();
 
   const { error } = await supabase
     .from("promoted_partners")
     .delete()
-    .eq("id", partnerId);
-  if (error) throw new Error(error.message);
+    .eq("id", partnerId)
+    .eq("campground_id", campground.id);
 
-  revalidateAll(camp.slug);
+  if (error) throw new Error(error.message);
+  revalidateAll(campground.slug);
 }
 
-// ━━━ ANALYTICS ━━━
+// ═══════════════════════════════════════════════════════════════════════════
+// 📊 ANALYTICS
+// ═══════════════════════════════════════════════════════════════════════════
+
 export async function trackPartnerClick(partnerId: string) {
+  // This uses anon/public access — no auth required
   const supabase = await createClient();
   const { error } = await supabase
     .from("partner_clicks")
     .insert({ partner_id: partnerId });
+  // RLS WITH CHECK validates the partner exists and belongs to an active campground
   if (error) console.error("Click track failed:", error.message);
   return { success: true };
 }
-// ━━━ FACILITIES ━━━
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🏢 FACILITIES
+// ═══════════════════════════════════════════════════════════════════════════
 
 export async function saveFacility(
   campgroundId: string,
-  data: {
+  rawData: {
     name: string;
     type: string;
     walking_minutes: number;
     is_active: boolean;
   },
 ) {
-  const { supabase, camp } = await verifyOwnership(campgroundId);
+  const validated = FacilitySchema.safeParse(rawData);
+  if (!validated.success) throw new Error(validated.error.issues[0].message);
 
-  const name = data.name.trim();
-  if (!name) throw new Error("Namn krävs.");
-  if (name.length > 100) throw new Error("Max 100 tecken.");
+  const data = validated.data;
+  const { supabase, campground } = await requireCampground(campgroundId);
 
   const { data: inserted, error } = await supabase
     .from("internal_locations")
     .insert({
-      campground_id: campgroundId,
-      name,
+      campground_id: campground.id,
+      name: data.name,
       type: data.type,
-      walking_minutes: Math.max(0, Math.min(30, data.walking_minutes)),
+      walking_minutes: data.walking_minutes,
       is_active: data.is_active,
     })
     .select("id")
     .single();
 
   if (error) throw new Error(error.message);
-  revalidateAll(camp.slug);
+  revalidateAll(campground.slug);
   return { success: true, id: inserted.id };
 }
 
 export async function deleteFacility(facilityId: string) {
-  const supabase = await createClient();
-  const { data: facility } = await supabase
-    .from("internal_locations")
-    .select("campground_id")
-    .eq("id", facilityId)
-    .single();
-
-  if (!facility) throw new Error("Facilitet saknas.");
-  const { camp } = await verifyOwnership(facility.campground_id);
+  const { supabase, campground } = await requireCampground();
 
   const { error } = await supabase
     .from("internal_locations")
     .delete()
-    .eq("id", facilityId);
+    .eq("id", facilityId)
+    .eq("campground_id", campground.id);
 
   if (error) throw new Error(error.message);
-  revalidateAll(camp.slug);
+  revalidateAll(campground.slug);
   return { success: true };
 }

@@ -1,12 +1,17 @@
 // src/lib/hooks/useGuestApp.ts
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { prefetchAiPlan } from "@/app/camp/[slug]/ai-action";
+import { useSavedItems } from "@/lib/hooks/useSavedItems";
 import type { RoadDistanceMap } from "@/lib/routing";
 import { getOrCreateSessionId } from "@/lib/session";
-import { trackDirectionsClick, trackPageView } from "@/lib/tracking";
+import {
+  trackDirectionsClick,
+  trackPageView,
+  trackSavedPlace,
+} from "@/lib/tracking";
 import type { CachedPlace, Campground } from "@/types/database";
 import type { Lang, TabId, WeatherProp } from "@/types/guest";
 
@@ -17,10 +22,6 @@ interface UseGuestAppParams {
   distanceMap: RoadDistanceMap;
 }
 
-/**
- * Weather bucket matching server logic.
- * When this changes, we need to re-prefetch.
- */
 function weatherBucket(weather: WeatherProp | null): string {
   if (!weather) return "none";
   const tBucket = Math.round(weather.temp / 5) * 5;
@@ -47,16 +48,35 @@ export function useGuestApp({
 
   const visiblePlaces = places.filter((p) => !p.is_hidden);
 
+  // ── Saved items with analytics callback ──────────────────
+  // useMemo keeps the options object referentially stable so
+  // toggleSaved's useCallback dependency doesn't churn.
+  //
+  // onSave fires ONLY when a place is newly added to the list
+  // (not when removed). This is the "heart click" tracking.
+  const savedItemsOptions = useMemo(
+    () => ({
+      onSave: (placeId: string) => {
+        if (!campground.id || !sessionIdRef.current) return;
+        trackSavedPlace(campground.id, placeId, sessionIdRef.current);
+      },
+    }),
+    [campground.id],
+  );
+
+  const { savedIds, toggleSaved, isSaved, removeSaved, clearAll } =
+    useSavedItems(savedItemsOptions);
+
   // Set current hour on mount
   useEffect(() => {
     setCurrentHour(new Date().getHours());
   }, []);
 
-  // Track page views
+  // Track page views with language
   useEffect(() => {
     if (!campground.id || !sessionIdRef.current) return;
-    trackPageView(campground.id, sessionIdRef.current, activeTab);
-  }, [activeTab, campground.id]);
+    trackPageView(campground.id, sessionIdRef.current, activeTab, lang);
+  }, [activeTab, lang, campground.id]);
 
   // Intersection observer for sticky header
   useEffect(() => {
@@ -70,7 +90,7 @@ export function useGuestApp({
     return () => observer.disconnect();
   }, []);
 
-  // Prefetch AI plan — runs on mount AND when weather bucket changes
+  // Prefetch AI plan
   useEffect(() => {
     if (!visiblePlaces.length) return;
 
@@ -111,5 +131,10 @@ export function useGuestApp({
     scrollRef,
     switchTab,
     handleDirectionsClick,
+    savedIds,
+    toggleSaved,
+    isSaved,
+    removeSaved,
+    clearAllSaved: clearAll,
   };
 }
