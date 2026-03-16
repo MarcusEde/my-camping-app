@@ -1,40 +1,31 @@
+// src/app/dashboard/DashboardNav.tsx
 "use client";
 
 import { hexToRgba } from "@/lib/utils";
 import type { Campground } from "@/types/database";
-import { ExternalLink, Eye, LogOut, QrCode } from "lucide-react";
+import {
+  BarChart3,
+  ExternalLink,
+  LogOut,
+  MapPin,
+  QrCode,
+  Settings,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import React from "react";
 
 /* ── Nav items ───────────────────────────────────────────── */
+// UI REDESIGN: Replaced emojis and descriptive sub-labels with crisp, B2B-standard Lucide icons.
 const NAV = [
-  {
-    href: "/dashboard",
-    label: "Översikt",
-    emoji: "📊",
-    sub: "Analys & statistik",
-    exact: true,
-  },
-  {
-    href: "/dashboard/places",
-    label: "Platser",
-    emoji: "📍",
-    sub: "Pinna, dölj & tipsa",
-    exact: false,
-  },
-  {
-    href: "/dashboard/partners",
-    label: "Partners",
-    emoji: "🤝",
-    sub: "Erbjudanden & klick",
-    exact: false,
-  },
+  { href: "/dashboard", label: "Översikt", icon: BarChart3, exact: true },
+  { href: "/dashboard/places", label: "Platser", icon: MapPin, exact: false },
+  { href: "/dashboard/partners", label: "Partners", icon: Users, exact: false },
   {
     href: "/dashboard/settings",
     label: "Inställningar",
-    emoji: "⚙️",
-    sub: "Utseende & anslag",
+    icon: Settings,
     exact: false,
   },
 ];
@@ -53,7 +44,7 @@ export default function DashboardNav({
   children,
 }: Props) {
   const pathname = usePathname();
-  const brand = campground.primary_color || "#2A3C34";
+  const brand = campground.primary_color || "#059669";
   const guestUrl = `/camp/${campground.slug}`;
 
   const isActive = (href: string, exact: boolean) =>
@@ -63,98 +54,107 @@ export default function DashboardNav({
     campground.subscription_status === "inactive" ||
     campground.subscription_status === "cancelled";
 
+  // UI REDESIGN: Injected brand color as CSS variables at the root to allow clean Tailwind integration
+  // without relying on messy inline style objects on every single element.
+  const cssVars = {
+    "--theme-brand": brand,
+    "--theme-brand-light": hexToRgba(brand, 0.08),
+  } as React.CSSProperties;
+
   return (
-    <div className="flex h-screen overflow-hidden bg-[#FDFCFB]">
+    <div
+      style={cssVars}
+      className="flex h-screen overflow-hidden bg-stone-50 font-sans text-stone-900 selection:bg-[var(--theme-brand-light)] selection:text-[var(--theme-brand)]"
+    >
       {/* ═══════════════════════════════════════
           DESKTOP SIDEBAR
           ═══════════════════════════════════════ */}
-      <aside className="hidden lg:flex w-[220px] shrink-0 flex-col bg-white border-r border-stone-100">
+      <aside className="hidden lg:flex w-64 shrink-0 flex-col bg-white border-r border-stone-200 z-20">
         {/* Campground identity */}
-        <div className="px-4 py-4 border-b border-stone-100">
-          <div className="flex items-center gap-3">
-            <div
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm text-white shadow-sm"
-              style={{ backgroundColor: brand }}
-            >
-              🏕️
-            </div>
+        <div className="h-16 flex items-center px-6 border-b border-stone-200 shrink-0">
+          <div className="flex items-center gap-3 w-full">
+            {/* UI REDESIGN: Removed the pastel emoji circle. Replaced with a sharp, professional brand block or real logo. */}
+            {campground.logo_url ? (
+              <img
+                src={campground.logo_url}
+                alt={campground.name}
+                className="h-7 w-7 object-contain rounded"
+              />
+            ) : (
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-[var(--theme-brand)] text-white font-bold text-xs tracking-wider">
+                {campground.name.substring(0, 2).toUpperCase()}
+              </div>
+            )}
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] font-black tracking-tight text-stone-900 leading-tight">
+              <p className="truncate text-sm font-semibold text-stone-900 tracking-tight leading-tight">
                 {campground.name}
-              </p>
-              <p className="text-[9px] font-black uppercase tracking-[0.18em] text-stone-400 mt-0.5">
-                Ägarportal
               </p>
             </div>
           </div>
         </div>
 
         {/* Main nav */}
-        <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
+        <nav className="flex-1 overflow-y-auto px-4 py-6 space-y-1">
+          <p className="px-2 text-xs font-semibold text-stone-400 uppercase tracking-wider mb-4">
+            Meny
+          </p>
           {NAV.map((item) => {
             const active = isActive(item.href, item.exact);
+            const Icon = item.icon;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all ${
+                className={`group flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-all outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-brand)] ${
                   active
-                    ? "text-white shadow-sm"
-                    : "text-stone-600 hover:bg-stone-50"
+                    ? "bg-[var(--theme-brand-light)] text-[var(--theme-brand)]"
+                    : "text-stone-600 hover:bg-stone-100 hover:text-stone-900"
                 }`}
-                style={active ? { backgroundColor: brand } : undefined}
               >
-                <span className="text-base leading-none shrink-0">
-                  {item.emoji}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p
-                    className={`text-[12px] font-bold leading-tight ${
-                      active ? "text-white" : "text-stone-700"
-                    }`}
-                  >
-                    {item.label}
-                  </p>
-                  <p
-                    className={`text-[9px] truncate leading-tight mt-0.5 ${
-                      active ? "text-white/55" : "text-stone-400"
-                    }`}
-                  >
-                    {item.sub}
-                  </p>
-                </div>
+                <Icon
+                  size={18}
+                  className={
+                    active
+                      ? "text-[var(--theme-brand)]"
+                      : "text-stone-400 group-hover:text-stone-600"
+                  }
+                  strokeWidth={active ? 2.5 : 2}
+                />
+                {item.label}
               </Link>
             );
           })}
         </nav>
 
-        {/* Divider */}
-        <div className="mx-3 border-t border-stone-100" />
-
-        {/* Utility links */}
-        <div className="px-2 py-3 space-y-0.5">
+        {/* Utility links Footer */}
+        <div className="p-4 border-t border-stone-200 space-y-1 bg-stone-50/50">
           <Link
             href="/dashboard/qr"
-            className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-[11px] font-bold transition-all hover:bg-stone-50"
-            style={{ color: brand }}
+            className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-900 transition-colors"
           >
-            <QrCode size={13} />
-            QR-kod
+            <QrCode size={18} className="text-stone-400" />
+            Skriv ut QR-kod
           </Link>
           <a
             href={guestUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-[11px] font-bold transition-all hover:bg-stone-50"
-            style={{ color: brand }}
+            className="flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium text-[var(--theme-brand)] hover:bg-[var(--theme-brand-light)] transition-colors"
           >
-            <Eye size={13} />
-            Gästvy
-            <ExternalLink size={10} className="ml-auto opacity-40" />
+            <div className="flex items-center gap-3">
+              <ExternalLink size={18} />
+              Öppna Gästvy
+            </div>
           </a>
-          <form action={logoutAction}>
-            <button className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-[11px] font-bold text-stone-400 transition-all hover:bg-red-50 hover:text-red-500">
-              <LogOut size={13} />
+          <form
+            action={logoutAction}
+            className="pt-2 mt-2 border-t border-stone-200"
+          >
+            <button className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-stone-600 hover:bg-red-50 hover:text-red-600 transition-colors">
+              <LogOut
+                size={18}
+                className="text-stone-400 group-hover:text-red-500"
+              />
               Logga ut
             </button>
           </form>
@@ -162,116 +162,80 @@ export default function DashboardNav({
       </aside>
 
       {/* ═══════════════════════════════════════
-          MAIN CONTENT
+          MAIN CONTENT AREA
           ═══════════════════════════════════════ */}
-      <div className="flex flex-1 flex-col overflow-hidden min-w-0">
-        {/* Desktop top bar */}
-        <header className="hidden lg:flex items-center justify-between px-6 py-3 bg-white border-b border-stone-100 shrink-0">
-          {/* Active page title */}
-          {(() => {
-            const active = NAV.find((n) => isActive(n.href, n.exact ?? false));
-            return active ? (
-              <div className="flex items-center gap-2.5">
-                <span className="text-xl leading-none">{active.emoji}</span>
-                <div>
-                  <h1 className="text-[15px] font-black tracking-tight text-stone-900 leading-tight">
-                    {active.label}
-                  </h1>
-                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-stone-300">
-                    {active.sub}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div />
-            );
-          })()}
-
-          <div className="flex items-center gap-2">
-            <Link
-              href="/dashboard/qr"
-              className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.1em] transition-all active:scale-95"
-              style={{ backgroundColor: hexToRgba(brand, 0.07), color: brand }}
-            >
-              <QrCode size={12} />
-              QR-kod
-            </Link>
-            <a
-              href={guestUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.1em] transition-all active:scale-95"
-              style={{ backgroundColor: hexToRgba(brand, 0.07), color: brand }}
-            >
-              <Eye size={12} />
-              Gästvy
-              <ExternalLink size={8} className="opacity-40" />
-            </a>
-          </div>
-        </header>
-
+      <div className="flex flex-1 flex-col overflow-hidden min-w-0 relative">
         {/* Mobile top bar */}
-        <header className="flex lg:hidden items-center justify-between px-4 py-3 bg-white border-b border-stone-100 shrink-0">
+        <header className="flex lg:hidden items-center justify-between px-4 h-14 bg-white border-b border-stone-200 shrink-0 z-20">
           <div className="flex items-center gap-2.5">
-            <div
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs text-white"
-              style={{ backgroundColor: brand }}
-            >
-              🏕️
-            </div>
-            <span className="text-[13px] font-black text-stone-900 truncate max-w-[180px]">
+            {campground.logo_url ? (
+              <img
+                src={campground.logo_url}
+                alt=""
+                className="h-6 w-6 object-contain rounded"
+              />
+            ) : (
+              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-[var(--theme-brand)] text-white font-bold text-[10px]">
+                {campground.name.substring(0, 2).toUpperCase()}
+              </div>
+            )}
+            <span className="text-sm font-semibold text-stone-900 truncate max-w-[180px]">
               {campground.name}
             </span>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
             <a
               href={guestUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex h-8 w-8 items-center justify-center rounded-lg"
-              style={{ color: brand }}
+              className="p-2 text-[var(--theme-brand)] rounded-md hover:bg-[var(--theme-brand-light)]"
             >
-              <Eye size={16} />
+              <ExternalLink size={18} />
             </a>
-            <form action={logoutAction}>
-              <button className="flex h-8 w-8 items-center justify-center rounded-lg text-stone-400 hover:text-red-500 transition-colors">
-                <LogOut size={16} />
-              </button>
-            </form>
           </div>
         </header>
 
         {/* Page content */}
+        {/* UI REDESIGN: Added a subtle fade-in transition and removed the overarching lock blur logic from wrapping the exact DOM nodes to prevent jank, relying on CSS instead. */}
         <main
-          className={`flex-1 overflow-y-auto ${
-            isLocked ? "pointer-events-none select-none blur-sm opacity-50" : ""
+          className={`flex-1 overflow-y-auto p-4 md:p-8 animate-fade-in ${
+            isLocked
+              ? "pointer-events-none select-none grayscale opacity-60"
+              : ""
           }`}
         >
-          {children}
+          <div className="max-w-6xl mx-auto">{children}</div>
         </main>
 
         {/* Mobile bottom tab bar */}
-        <nav className="flex lg:hidden items-stretch border-t border-stone-200/50 bg-white shrink-0">
+        <nav className="flex lg:hidden items-stretch h-16 border-t border-stone-200 bg-white shrink-0 z-20 pb-safe">
           {NAV.map((item) => {
             const active = isActive(item.href, item.exact);
+            const Icon = item.icon;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2.5 px-1 transition-all active:scale-95"
+                className="flex flex-1 flex-col items-center justify-center gap-1 py-2 px-1 relative"
               >
-                <span className="text-lg leading-none">{item.emoji}</span>
+                <Icon
+                  size={20}
+                  className={
+                    active ? "text-[var(--theme-brand)]" : "text-stone-400"
+                  }
+                  strokeWidth={active ? 2.5 : 2}
+                />
                 <span
-                  className={`text-[8px] font-black uppercase tracking-[0.05em] leading-tight ${
-                    active ? "text-stone-900" : "text-stone-400"
+                  className={`text-[10px] font-medium tracking-wide ${
+                    active ? "text-[var(--theme-brand)]" : "text-stone-500"
                   }`}
                 >
                   {item.label}
                 </span>
-                <div
-                  className="h-[2px] w-4 rounded-full transition-all duration-200"
-                  style={{ backgroundColor: active ? brand : "transparent" }}
-                />
+                {/* Active Indicator */}
+                {active && (
+                  <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[3px] bg-[var(--theme-brand)] rounded-b-md" />
+                )}
               </Link>
             );
           })}

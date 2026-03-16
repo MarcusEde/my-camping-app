@@ -15,7 +15,12 @@ interface UseSettingsFormProps {
 }
 
 export function useSettingsForm({ campground }: UseSettingsFormProps) {
-  const [isPending, startTransition] = useTransition();
+  /* ── Separate transitions so operations don't block each other ── */
+  const [isSaving, startSaveTransition] = useTransition();
+  const [isCreatingAnnouncement, startCreateTransition] = useTransition();
+  const [, startDeleteTransition] = useTransition();
+  const [, startUpdateTransition] = useTransition();
+
   const [saved, setSaved] = useState(false);
   const [activeSection, setActiveSection] = useState<SectionId>("branding");
 
@@ -57,7 +62,9 @@ export function useSettingsForm({ campground }: UseSettingsFormProps) {
   const [newContent, setNewContent] = useState("");
   const [newType, setNewType] = useState<"info" | "event" | "warning">("info");
   const [showNewForm, setShowNewForm] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingAnnouncementId, setDeletingAnnouncementId] = useState<
+    string | null
+  >(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
@@ -70,7 +77,8 @@ export function useSettingsForm({ campground }: UseSettingsFormProps) {
 
   // ── Handlers ──
   const handleSave = () => {
-    startTransition(async () => {
+    if (isSaving) return;
+    startSaveTransition(async () => {
       try {
         await updateCampgroundSettings(campground.id, {
           primary_color: primaryColor,
@@ -99,8 +107,9 @@ export function useSettingsForm({ campground }: UseSettingsFormProps) {
   };
 
   const handleCreateAnnouncement = () => {
-    if (!newTitle.trim() || !newContent.trim()) return;
-    startTransition(async () => {
+    if (!newTitle.trim() || !newContent.trim() || isCreatingAnnouncement)
+      return;
+    startCreateTransition(async () => {
       try {
         await createAnnouncement(campground.id, newTitle, newContent, newType);
         setNewTitle("");
@@ -123,7 +132,7 @@ export function useSettingsForm({ campground }: UseSettingsFormProps) {
 
   const handleUpdateAnnouncement = () => {
     if (!editingId || !editTitle.trim() || !editContent.trim()) return;
-    startTransition(async () => {
+    startUpdateTransition(async () => {
       try {
         await updateAnnouncement(editingId, editTitle, editContent, editType);
         setEditingId(null);
@@ -135,15 +144,16 @@ export function useSettingsForm({ campground }: UseSettingsFormProps) {
   };
 
   const handleDeleteAnnouncement = (id: string) => {
-    setDeletingId(id);
-    startTransition(async () => {
+    if (deletingAnnouncementId) return;
+    setDeletingAnnouncementId(id);
+    startDeleteTransition(async () => {
       try {
         await deleteAnnouncement(id);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Unknown error";
         alert(`Fel: ${msg}`);
       } finally {
-        setDeletingId(null);
+        setDeletingAnnouncementId(null);
       }
     });
   };
@@ -159,7 +169,9 @@ export function useSettingsForm({ campground }: UseSettingsFormProps) {
 
   return {
     // UI state
-    isPending,
+    isPending: isSaving,
+    isCreatingAnnouncement,
+    deletingAnnouncementId,
     saved,
     activeSection,
     setActiveSection,
@@ -209,7 +221,6 @@ export function useSettingsForm({ campground }: UseSettingsFormProps) {
     newType,
     setNewType,
     showNewForm,
-    deletingId,
     editingId,
     editTitle,
     setEditTitle,

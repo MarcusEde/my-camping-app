@@ -169,6 +169,8 @@ export default function SettingsForm({ campground, announcements }: Props) {
           onCreate={s.handleCreateAnnouncement}
           onStartEdit={s.handleStartEdit}
           onDelete={s.handleDeleteAnnouncement}
+          isCreating={s.isCreatingAnnouncement}
+          deletingId={s.deletingAnnouncementId}
         />
       )}
     </div>
@@ -603,6 +605,8 @@ function AnnouncementsSection({
   onCreate,
   onStartEdit,
   onDelete,
+  isCreating,
+  deletingId,
 }: {
   brand: string;
   announcements: Announcement[];
@@ -618,6 +622,8 @@ function AnnouncementsSection({
   onCreate: () => void;
   onStartEdit: (ann: Announcement) => void;
   onDelete: (id: string) => void;
+  isCreating: boolean;
+  deletingId: string | null;
 }) {
   return (
     <div className="space-y-3">
@@ -626,7 +632,8 @@ function AnnouncementsSection({
         {!showNewForm && (
           <button
             onClick={onOpenNewForm}
-            className="flex items-center gap-1.5 rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.1em] text-white transition-all active:scale-95"
+            disabled={isCreating}
+            className="flex items-center gap-1.5 rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.1em] text-white transition-all active:scale-95 disabled:opacity-50"
             style={{ backgroundColor: brand }}
           >
             <Plus size={13} strokeWidth={2.5} /> Nytt anslag
@@ -638,7 +645,11 @@ function AnnouncementsSection({
         <div className="space-y-3 rounded-[16px] p-4 bg-stone-50">
           <div className="flex items-center justify-between">
             <p className="text-[12px] font-black">Skapa anslag</p>
-            <button onClick={onCloseNewForm} className="text-stone-400">
+            <button
+              onClick={onCloseNewForm}
+              disabled={isCreating}
+              className="text-stone-400 disabled:opacity-30"
+            >
               <X size={12} />
             </button>
           </div>
@@ -647,7 +658,8 @@ function AnnouncementsSection({
               <button
                 key={at.value}
                 onClick={() => setNewType(at.value)}
-                className="px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider transition-all"
+                disabled={isCreating}
+                className="px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-50"
                 style={
                   newType === at.value
                     ? {
@@ -661,29 +673,34 @@ function AnnouncementsSection({
               </button>
             ))}
           </div>
-          <FormInput
-            value={newTitle}
-            onChange={setNewTitle}
-            placeholder="Rubrik..."
-            brand={brand}
-          />
-          <FormTextArea
-            value={newContent}
-            onChange={setNewContent}
-            placeholder="Meddelande..."
-            brand={brand}
-          />
+          <fieldset disabled={isCreating} className="space-y-3">
+            <FormInput
+              value={newTitle}
+              onChange={setNewTitle}
+              placeholder="Rubrik..."
+              brand={brand}
+            />
+            <FormTextArea
+              value={newContent}
+              onChange={setNewContent}
+              placeholder="Meddelande..."
+              brand={brand}
+            />
+          </fieldset>
           <div className="flex gap-2">
             <button
               onClick={onCreate}
-              className="px-5 py-2.5 rounded-full text-[10px] font-black uppercase text-white"
+              disabled={isCreating}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-full text-[10px] font-black uppercase text-white transition-all active:scale-95 disabled:opacity-60"
               style={{ backgroundColor: brand }}
             >
-              Publicera
+              {isCreating && <Loader2 size={12} className="animate-spin" />}
+              {isCreating ? "Publicerar..." : "Publicera"}
             </button>
             <button
               onClick={onCloseNewForm}
-              className="text-[10px] font-black text-stone-400"
+              disabled={isCreating}
+              className="text-[10px] font-black text-stone-400 disabled:opacity-30"
             >
               Avbryt
             </button>
@@ -691,33 +708,46 @@ function AnnouncementsSection({
         </div>
       )}
 
-      {announcements.map((ann) => (
-        <div
-          key={ann.id}
-          className="flex items-center justify-between bg-white p-3 rounded-xl border border-stone-100"
-        >
-          <div>
-            <p className="text-[12px] font-bold text-stone-800">{ann.title}</p>
-            <p className="text-[10px] text-stone-400 truncate max-w-[200px]">
-              {ann.content}
-            </p>
+      {announcements.map((ann) => {
+        const isDeleting = deletingId === ann.id;
+        return (
+          <div
+            key={ann.id}
+            className={`flex items-center justify-between bg-white p-3 rounded-xl border border-stone-100 transition-opacity ${
+              isDeleting ? "opacity-40 pointer-events-none" : ""
+            }`}
+          >
+            <div>
+              <p className="text-[12px] font-bold text-stone-800">
+                {ann.title}
+              </p>
+              <p className="text-[10px] text-stone-400 truncate max-w-[200px]">
+                {ann.content}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => onStartEdit(ann)}
+                disabled={isDeleting}
+                className="text-stone-300 hover:text-stone-600 transition-colors"
+              >
+                <Pencil size={12} />
+              </button>
+              <button
+                onClick={() => onDelete(ann.id)}
+                disabled={!!deletingId}
+                className="text-stone-300 hover:text-red-500 transition-colors disabled:opacity-30"
+              >
+                {isDeleting ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : (
+                  <Trash2 size={12} />
+                )}
+              </button>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => onStartEdit(ann)}
-              className="text-stone-300 hover:text-stone-600 transition-colors"
-            >
-              <Pencil size={12} />
-            </button>
-            <button
-              onClick={() => onDelete(ann.id)}
-              className="text-stone-300 hover:text-red-500 transition-colors"
-            >
-              <Trash2 size={12} />
-            </button>
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

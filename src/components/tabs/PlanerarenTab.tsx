@@ -2,10 +2,9 @@
 "use client";
 
 import {
-  PERIOD_STYLES,
   SPRING_TAP,
   STAGGER_CONTAINER,
-  STAGGER_ITEM,
+  STAGGER_ITEM
 } from "@/lib/constants";
 import type { EnrichedItem } from "@/lib/hooks/usePlanner";
 import { usePlanner } from "@/lib/hooks/usePlanner";
@@ -18,7 +17,6 @@ import {
   plannerLabels,
   type PlannerLabels,
 } from "@/lib/translations";
-import { hexToRgba } from "@/lib/utils";
 import type { CachedPlace, Campground } from "@/types/database";
 import type { Lang, WeatherProp } from "@/types/guest";
 import { AnimatePresence, motion } from "framer-motion";
@@ -30,8 +28,7 @@ import {
   Heart,
   MapPin,
   Sparkles,
-  Star,
-  Sun,
+  Star
 } from "lucide-react";
 
 interface Props {
@@ -53,7 +50,7 @@ export default function PlanerarenTab({
   isSaved,
   toggleSaved,
 }: Props) {
-  const brand = campground.primary_color || "#2A3C34";
+  const brand = campground.primary_color || "#059669";
   const l = plannerLabels[lang];
   const rain = weather?.isRaining ?? false;
 
@@ -80,13 +77,7 @@ export default function PlanerarenTab({
       initial="initial"
       animate="animate"
     >
-      <PlannerHeader
-        brand={brand}
-        weather={weather}
-        rain={rain}
-        lang={lang}
-        labels={l}
-      />
+      <PlannerHeader weather={weather} rain={rain} lang={lang} labels={l} />
 
       <AnimatePresence>
         {rain && <RainBanner note={l.rainNote} />}
@@ -102,7 +93,6 @@ export default function PlanerarenTab({
           hasPast={hasPast}
           nowIdx={nowIdx}
           places={places}
-          brand={brand}
           lang={lang}
           labels={l}
           distanceMap={distanceMap}
@@ -119,13 +109,11 @@ export default function PlanerarenTab({
 /* ── Planner Header ──────────────────────────────────── */
 
 function PlannerHeader({
-  brand,
   weather,
   rain,
   lang,
   labels: l,
 }: {
-  brand: string;
   weather?: WeatherProp | null;
   rain: boolean;
   lang: Lang;
@@ -134,50 +122,36 @@ function PlannerHeader({
   return (
     <motion.div
       variants={STAGGER_ITEM}
-      className="overflow-hidden rounded-[24px] bg-white ring-1 ring-stone-200/60"
+      className="bg-white border border-stone-200/75 rounded-2xl shadow-sm overflow-hidden"
     >
-      <div
-        className="px-5 py-4"
-        style={{
-          background: `linear-gradient(135deg,${hexToRgba(brand, 0.05)},${hexToRgba(brand, 0.01)})`,
-        }}
-      >
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-2.5">
-            <div
-              className="flex h-9 w-9 items-center justify-center rounded-[12px]"
-              style={{ backgroundColor: hexToRgba(brand, 0.08) }}
-            >
-              <Sparkles size={15} style={{ color: brand }} />
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <Calendar size={10} className="text-stone-300" />
-                <span className="text-[11px] font-bold text-stone-500">
-                  {getDayLabel(lang)} {getDateLabel(lang)}
-                </span>
-              </div>
-              <p className="mt-0.5 text-[9px] font-medium text-stone-300">
-                {l.subtitle}
-              </p>
-            </div>
+      <div className="px-5 py-4 flex items-start justify-between">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--brand-10)] text-[var(--brand)]">
+            <Sparkles size={20} />
           </div>
-          {weather && (
-            <div className="flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-1.5 ring-1 ring-stone-100">
-              {rain ? (
-                <CloudRain size={13} className="text-sky-400" />
-              ) : (
-                <Sun size={13} className="text-amber-400" />
-              )}
-              <span className="text-[12px] font-bold tabular-nums text-stone-600">
-                {Math.round(weather.temp)}°
+          <div>
+            <div className="flex items-center gap-1.5 text-[var(--brand)] mb-0.5">
+              <Calendar size={12} strokeWidth={2.5} />
+              <span className="text-[10px] font-bold uppercase tracking-wider">
+                {getDayLabel(lang)} {getDateLabel(lang)}
               </span>
             </div>
-          )}
+            <p className="text-sm font-semibold text-stone-900 leading-tight">
+              {l.subtitle}
+            </p>
+          </div>
         </div>
+        {weather && (
+          <div className="flex flex-col items-end pl-2">
+            <span className="text-2xl leading-none">{weather.icon}</span>
+            <span className="text-sm font-bold text-stone-700 mt-1">
+              {Math.round(weather.temp)}°
+            </span>
+          </div>
+        )}
       </div>
-      <div className="border-t border-stone-100 px-5 py-2">
-        <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-stone-300">
+      <div className="bg-stone-50 border-t border-stone-100 px-5 py-2.5">
+        <p className="text-[10px] font-semibold text-stone-500 uppercase tracking-wide flex items-center gap-1.5">
           ✨ {l.aiNote}
         </p>
       </div>
@@ -192,14 +166,10 @@ function RainBanner({ note }: { note: string }) {
     <motion.div
       variants={STAGGER_ITEM}
       exit={{ opacity: 0, height: 0 }}
-      className="flex items-center gap-3 rounded-[18px] border border-sky-100 bg-gradient-to-r from-sky-50 to-blue-50/50 p-3.5"
+      className="flex items-start gap-3 rounded-2xl border border-sky-200 bg-sky-50 p-4"
     >
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-white ring-1 ring-sky-100">
-        <CloudRain size={18} className="text-sky-400" />
-      </div>
-      <p className="text-[11px] font-medium leading-relaxed text-sky-700/80">
-        {note}
-      </p>
+      <CloudRain size={20} className="text-sky-500 shrink-0 mt-0.5" />
+      <p className="text-sm font-medium leading-relaxed text-sky-900">{note}</p>
     </motion.div>
   );
 }
@@ -208,22 +178,22 @@ function RainBanner({ note }: { note: string }) {
 
 function LoadingSkeleton() {
   return (
-    <div className="space-y-3">
-      {[1, 2, 3, 4, 5].map((i) => (
+    <div className="space-y-4">
+      {[1, 2, 3, 4].map((i) => (
         <motion.div
           key={i}
           variants={STAGGER_ITEM}
-          className="animate-pulse rounded-[20px] bg-white p-4 ring-1 ring-stone-200/60"
+          className="animate-pulse rounded-2xl bg-white p-5 border border-stone-200/50"
         >
-          <div className="flex gap-3">
-            <div className="h-12 w-12 shrink-0 rounded-[14px] bg-stone-100" />
-            <div className="flex-1 space-y-2.5">
+          <div className="flex gap-4">
+            <div className="h-12 w-12 shrink-0 rounded-xl bg-stone-100" />
+            <div className="flex-1 space-y-3 pt-1">
               <div className="flex gap-2">
-                <div className="h-3 w-12 rounded-full bg-stone-100" />
-                <div className="h-3 w-16 rounded-full bg-stone-50" />
+                <div className="h-3 w-16 rounded bg-stone-100" />
+                <div className="h-3 w-20 rounded bg-stone-50" />
               </div>
-              <div className="h-4 w-3/5 rounded-full bg-stone-100" />
-              <div className="h-3 w-full rounded-full bg-stone-50" />
+              <div className="h-4 w-3/4 rounded bg-stone-100" />
+              <div className="h-3 w-full rounded bg-stone-50" />
             </div>
           </div>
         </motion.div>
@@ -237,9 +207,9 @@ function LoadingSkeleton() {
 function EmptyState({ lang }: { lang: Lang }) {
   return (
     <motion.div variants={STAGGER_ITEM}>
-      <div className="rounded-[28px] bg-gradient-to-b from-white to-stone-50/50 px-6 py-12 text-center ring-1 ring-stone-200/60">
-        <span className="text-3xl">⛺</span>
-        <h3 className="mt-3 text-[15px] font-black text-stone-700">
+      <div className="rounded-3xl bg-white px-6 py-12 text-center border border-stone-200/75 shadow-sm">
+        <span className="text-4xl block mb-4">⛺</span>
+        <h3 className="text-base font-bold text-stone-900">
           {noPlanLabels[lang]}
         </h3>
       </div>
@@ -254,7 +224,6 @@ function Timeline({
   hasPast,
   nowIdx,
   places,
-  brand,
   lang,
   labels: l,
   distanceMap,
@@ -267,7 +236,6 @@ function Timeline({
   hasPast: boolean;
   nowIdx: number;
   places: CachedPlace[];
-  brand: string;
   lang: Lang;
   labels: PlannerLabels;
   distanceMap: RoadDistanceMap;
@@ -277,15 +245,12 @@ function Timeline({
   toggleSaved?: (id: string) => void;
 }) {
   return (
-    <div className="relative">
-      <div
-        className="absolute bottom-8 left-[23px] top-8 w-[1.5px]"
-        style={{
-          background: `repeating-linear-gradient(to bottom,${hexToRgba(brand, 0.12)} 0px,${hexToRgba(brand, 0.12)} 4px,transparent 4px,transparent 12px)`,
-        }}
-      />
+    <div className="relative pl-[22px]">
+      {/* Structural Vertical Line */}
+      <div className="absolute bottom-8 left-[33px] top-8 w-px bg-stone-200" />
+
       <motion.div
-        className="space-y-3"
+        className="space-y-5"
         variants={STAGGER_CONTAINER}
         initial="initial"
         animate="animate"
@@ -298,7 +263,6 @@ function Timeline({
             nowIdx={nowIdx}
             hasPast={hasPast}
             places={places}
-            brand={brand}
             lang={lang}
             labels={l}
             distanceMap={distanceMap}
@@ -315,39 +279,24 @@ function Timeline({
 
 /* ── Now Divider ─────────────────────────────────────── */
 
-function NowDivider({ brand, label }: { brand: string; label: string }) {
+function NowDivider({ label }: { label: string }) {
   return (
     <motion.div
       variants={STAGGER_ITEM}
-      className="relative z-20 mb-3 flex items-center gap-2 pl-1"
+      className="relative z-20 mb-4 flex items-center gap-3 -ml-[22px]"
     >
-      <div className="flex h-[48px] w-[48px] shrink-0 items-center justify-center">
-        <div className="relative flex h-4 w-4 items-center justify-center">
-          <span
-            className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-40"
-            style={{ backgroundColor: brand }}
-          />
-          <span
-            className="relative inline-flex h-3 w-3 rounded-full"
-            style={{ backgroundColor: brand }}
-          />
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center">
+        <div className="relative flex h-3 w-3 items-center justify-center">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-40 bg-[var(--brand)]" />
+          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[var(--brand)]" />
         </div>
       </div>
-      <div className="flex flex-1 items-center gap-2">
-        <div
-          className="h-px flex-1"
-          style={{ backgroundColor: hexToRgba(brand, 0.15) }}
-        />
-        <span
-          className="shrink-0 rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-[0.2em] text-white"
-          style={{ backgroundColor: brand }}
-        >
+      <div className="flex flex-1 items-center gap-3 pr-4">
+        <div className="h-px flex-1 bg-stone-200" />
+        <span className="shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white bg-[var(--brand)] shadow-sm">
           {label}
         </span>
-        <div
-          className="h-px flex-1"
-          style={{ backgroundColor: hexToRgba(brand, 0.15) }}
-        />
+        <div className="h-px flex-1 bg-stone-200" />
       </div>
     </motion.div>
   );
@@ -361,7 +310,6 @@ function TimelineEntry({
   nowIdx,
   hasPast,
   places,
-  brand,
   lang,
   labels: l,
   distanceMap,
@@ -375,7 +323,6 @@ function TimelineEntry({
   nowIdx: number;
   hasPast: boolean;
   places: CachedPlace[];
-  brand: string;
   lang: Lang;
   labels: PlannerLabels;
   distanceMap: RoadDistanceMap;
@@ -384,24 +331,21 @@ function TimelineEntry({
   isSaved?: (id: string) => boolean;
   toggleSaved?: (id: string) => void;
 }) {
-  const s = PERIOD_STYLES[item.period] ?? PERIOD_STYLES.morning;
   const place = item.placeId ? places.find((x) => x.id === item.placeId) : null;
   const { dimmed } = item;
-
+  const isNow = !dimmed && idx === nowIdx;
   const placeIsSaved = item.placeId && isSaved ? isSaved(item.placeId) : false;
 
   return (
-    <div>
-      {idx === nowIdx && hasPast && (
-        <NowDivider brand={brand} label={l.nowLabel} />
-      )}
+    <div className="relative">
+      {idx === nowIdx && hasPast && <NowDivider label={l.nowLabel} />}
 
       {idx === 0 && hasPast && (
         <motion.div
           variants={STAGGER_ITEM}
-          className="mb-2 flex justify-center"
+          className="mb-3 flex justify-center pl-6"
         >
-          <span className="rounded-full bg-stone-50 px-3 py-1 text-[8px] font-black uppercase tracking-[0.2em] text-stone-300 ring-1 ring-stone-100">
+          <span className="rounded-md bg-stone-100 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-stone-400">
             {l.earlierToday}
           </span>
         </motion.div>
@@ -409,71 +353,80 @@ function TimelineEntry({
 
       <motion.div
         variants={STAGGER_ITEM}
-        className={`relative flex gap-3 pl-1 transition-opacity ${dimmed ? "opacity-40" : "opacity-100"}`}
+        className={`relative flex items-start gap-4 transition-opacity duration-300 ${dimmed ? "opacity-50" : "opacity-100"}`}
       >
-        {/* Timeline node */}
-        <TimelineNode
-          emoji={item.emoji}
-          dimmed={dimmed}
-          isNow={!dimmed && idx === nowIdx}
-          periodStyle={s}
-        />
+        {/* Timeline Node */}
+        <div className="relative z-10 flex h-11 w-11 shrink-0 items-center justify-center -ml-[22px]">
+          <div
+            className={`flex h-11 w-11 items-center justify-center rounded-xl text-xl shadow-sm border ${
+              isNow
+                ? "bg-white border-[var(--brand)]"
+                : dimmed
+                  ? "bg-stone-50 border-stone-200"
+                  : "bg-white border-stone-200"
+            }`}
+          >
+            <span className={dimmed ? "grayscale" : ""}>{item.emoji}</span>
+          </div>
+        </div>
 
         {/* Card */}
         <motion.div
-          className={`flex-1 overflow-hidden rounded-[18px] ring-1 ${
+          className={`flex-1 overflow-hidden rounded-2xl border ${
             dimmed
-              ? "bg-stone-50/80 ring-stone-100"
-              : `bg-white ring-stone-200/60 ${idx === nowIdx ? "shadow-sm" : ""}`
+              ? "bg-stone-50/50 border-stone-200/50"
+              : isNow
+                ? "bg-white border-[var(--brand)] shadow-[0_4px_20px_var(--brand-10)]"
+                : "bg-white border-stone-200/75 shadow-sm"
           }`}
-          whileTap={dimmed ? undefined : { scale: 0.985 }}
+          whileTap={dimmed ? undefined : { scale: 0.98 }}
           transition={SPRING_TAP}
         >
-          <div className="p-4">
-            {/* Top row: meta + heart */}
-            <div className="mb-2 flex items-start justify-between">
-              <ItemMeta
-                time={item.time}
-                period={periodName(item.period)}
-                dimmed={dimmed}
-                periodStyle={s}
-              />
+          <div className="p-5">
+            {/* Top row: Meta + Heart */}
+            <div className="mb-3 flex items-start justify-between">
+              <div className="flex items-center gap-2">
+                <div
+                  className={`flex items-center gap-1.5 font-mono text-xs font-bold ${dimmed ? "text-stone-400 line-through" : "text-stone-700"}`}
+                >
+                  <Clock size={12} className="text-stone-400" />
+                  {item.time}
+                </div>
+                <span
+                  className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${dimmed ? "bg-stone-100 text-stone-400" : "bg-stone-100 text-stone-600"}`}
+                >
+                  {periodName(item.period)}
+                </span>
+              </div>
 
-              {/* Heart toggle — only when there's a linked place and not dimmed */}
+              {/* Heart toggle */}
               {item.placeId && !dimmed && toggleSaved && (
                 <motion.button
                   onClick={(e) => {
                     e.stopPropagation();
                     toggleSaved(item.placeId!);
                   }}
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
-                  style={{
-                    backgroundColor: placeIsSaved
-                      ? hexToRgba("#ef4444", 0.08)
-                      : "rgba(0,0,0,0.03)",
-                  }}
+                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors ${
+                    placeIsSaved
+                      ? "bg-red-50 hover:bg-red-100"
+                      : "bg-stone-50 hover:bg-stone-100 border border-stone-100"
+                  }`}
                   whileTap={{ scale: 0.8 }}
-                  transition={{
-                    type: "spring",
-                    stiffness: 440,
-                    damping: 24,
-                  }}
                   aria-label={
                     placeIsSaved ? "Remove from My Stay" : "Save to My Stay"
                   }
                 >
                   <motion.div
                     animate={
-                      placeIsSaved ? { scale: [1, 1.3, 1] } : { scale: 1 }
+                      placeIsSaved ? { scale: [1, 1.2, 1] } : { scale: 1 }
                     }
-                    transition={{ duration: 0.3, ease: "easeOut" }}
+                    transition={{ duration: 0.3 }}
                   >
                     <Heart
-                      size={13}
-                      strokeWidth={2}
+                      size={14}
                       fill={placeIsSaved ? "#ef4444" : "none"}
                       className={
-                        placeIsSaved ? "text-red-500" : "text-stone-300"
+                        placeIsSaved ? "text-red-500" : "text-stone-400"
                       }
                     />
                   </motion.div>
@@ -481,8 +434,9 @@ function TimelineEntry({
               )}
             </div>
 
+            {/* Badges (Opening hours, distance) */}
             {place && !dimmed && (
-              <div className="mb-2 flex justify-end">
+              <div className="mb-3 flex flex-wrap gap-1.5">
                 <Badges
                   place={place}
                   dist={distanceMap[place.id] ?? ""}
@@ -493,34 +447,54 @@ function TimelineEntry({
               </div>
             )}
 
+            {/* Content */}
             <h4
-              className={`text-[14px] font-black leading-snug tracking-tight ${dimmed ? "text-stone-400" : "text-stone-800"}`}
+              className={`text-base font-bold leading-tight mb-1.5 ${dimmed ? "text-stone-500" : "text-stone-900"}`}
             >
               {item.title}
             </h4>
 
             <p
-              className={`mt-1 text-[11.5px] font-medium leading-relaxed ${dimmed ? "text-stone-300" : "text-stone-500"}`}
+              className={`text-sm leading-relaxed ${dimmed ? "text-stone-400" : "text-stone-600"}`}
             >
               {item.description}
             </p>
 
-            {item.tip && !dimmed && <TipBadge tip={item.tip} />}
-
-            {place?.owner_note && !dimmed && (
-              <OwnerNote
-                note={place.owner_note}
-                brand={brand}
-                isSwedish={lang === "sv"}
-              />
+            {/* AI Tip */}
+            {item.tip && !dimmed && (
+              <div className="mt-3 flex items-start gap-1.5 bg-amber-50/50 border border-amber-100/50 rounded-lg p-2.5">
+                <Star
+                  size={12}
+                  className="mt-0.5 shrink-0 text-amber-400"
+                  fill="currentColor"
+                />
+                <span className="text-xs font-medium text-amber-800">
+                  {item.tip}
+                </span>
+              </div>
             )}
 
+            {/* Owner Note */}
+            {place?.owner_note && !dimmed && (
+              <div className="mt-3 rounded-lg bg-stone-50 border border-stone-100 p-3">
+                <p className="text-xs font-medium italic leading-relaxed text-stone-600">
+                  "{place.owner_note}"
+                </p>
+              </div>
+            )}
+
+            {/* Map Link */}
             {mapUrl && !dimmed && (
-              <DirectionsButton
+              <a
                 href={mapUrl}
-                label={l.directions}
-                brand={brand}
-              />
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl py-2.5 bg-[var(--brand-10)] hover:bg-[var(--brand-20)] text-[var(--brand)] text-xs font-bold transition-colors"
+              >
+                <MapPin size={14} />
+                {l.directions}
+                <ExternalLink size={12} className="opacity-50 ml-1" />
+              </a>
             )}
           </div>
         </motion.div>
@@ -529,164 +503,12 @@ function TimelineEntry({
   );
 }
 
-/* ── Timeline Node ───────────────────────────────────── */
-
-function TimelineNode({
-  emoji,
-  dimmed,
-  isNow,
-  periodStyle: s,
-}: {
-  emoji: string;
-  dimmed: boolean;
-  isNow: boolean;
-  periodStyle: (typeof PERIOD_STYLES)[string];
-}) {
-  return (
-    <div className="relative z-10 flex h-[48px] w-[48px] shrink-0 items-center justify-center">
-      <div
-        className={`flex h-[48px] w-[48px] items-center justify-center rounded-[16px] text-xl ring-1 ring-stone-200/60 ${
-          isNow
-            ? `bg-gradient-to-br ${s.grad} shadow-sm`
-            : dimmed
-              ? "bg-stone-50"
-              : "bg-white shadow-sm"
-        }`}
-      >
-        {dimmed ? <span className="grayscale">{emoji}</span> : emoji}
-      </div>
-      {!dimmed && (
-        <div
-          className={`absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-[2px] border-white shadow-sm ${s.dot}`}
-        />
-      )}
-    </div>
-  );
-}
-
-/* ── Item Meta ───────────────────────────────────────── */
-
-function ItemMeta({
-  time,
-  period,
-  dimmed,
-  periodStyle: s,
-}: {
-  time: string;
-  period: string;
-  dimmed: boolean;
-  periodStyle: (typeof PERIOD_STYLES)[string];
-}) {
-  return (
-    <div className="flex items-center gap-2">
-      <div
-        className={`flex items-center gap-1 ${dimmed ? "text-stone-400" : "text-stone-700"}`}
-      >
-        <Clock size={10} strokeWidth={2.5} className="text-stone-300" />
-        <span
-          className={`text-[12px] font-black tabular-nums tracking-tight ${dimmed ? "line-through decoration-stone-300" : ""}`}
-        >
-          {time}
-        </span>
-      </div>
-      <span
-        className={`rounded-full px-2 py-[3px] text-[8px] font-black uppercase tracking-[0.18em] ${
-          dimmed ? "bg-stone-100 text-stone-400" : `${s.bg} ${s.text}`
-        }`}
-      >
-        {period}
-      </span>
-    </div>
-  );
-}
-
-/* ── Tip Badge ───────────────────────────────────────── */
-
-function TipBadge({ tip }: { tip: string }) {
-  return (
-    <div className="mt-2 flex items-start gap-1.5">
-      <Star
-        size={9}
-        className="mt-[3px] shrink-0 text-amber-400"
-        fill="currentColor"
-      />
-      <span className="text-[10px] font-semibold leading-relaxed text-stone-400">
-        {tip}
-      </span>
-    </div>
-  );
-}
-
-/* ── Owner Note ──────────────────────────────────────── */
-
-function OwnerNote({
-  note,
-  brand,
-  isSwedish,
-}: {
-  note: string;
-  brand: string;
-  isSwedish: boolean;
-}) {
-  return (
-    <div
-      className="mt-3 rounded-[12px] px-3 py-2.5"
-      style={{
-        backgroundColor: hexToRgba(brand, 0.03),
-        borderLeft: `2px solid ${hexToRgba(brand, 0.15)}`,
-      }}
-    >
-      {!isSwedish && (
-        <span className="mb-0.5 block text-[7px] font-black uppercase tracking-[0.25em] text-stone-300">
-          🇸🇪 Original
-        </span>
-      )}
-      <p className="text-[10.5px] font-medium italic leading-relaxed text-stone-500">
-        &ldquo;{note}&rdquo;
-      </p>
-    </div>
-  );
-}
-
-/* ── Directions Button ───────────────────────────────── */
-
-function DirectionsButton({
-  href,
-  label,
-  brand,
-}: {
-  href: string;
-  label: string;
-  brand: string;
-}) {
-  return (
-    <motion.a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="mt-3.5 flex w-full items-center justify-center gap-2 rounded-[12px] py-2.5 text-[10px] font-black uppercase tracking-[0.12em] transition-all"
-      style={{
-        backgroundColor: hexToRgba(brand, 0.05),
-        color: brand,
-      }}
-      whileTap={{ scale: 0.97 }}
-      transition={SPRING_TAP}
-    >
-      <MapPin size={12} strokeWidth={2.5} />
-      {label}
-      <ExternalLink size={8} className="opacity-30" />
-    </motion.a>
-  );
-}
-
-/* ── Opening hours helpers ───────────────────────────── */
+/* ── Opening hours helpers (PRESERVED) ───────────────────────────── */
 
 function parseHoursRange(text: string): { open: number; close: number } | null {
   if (!text) return null;
-
   if (/24\s*(hours|h|timmar|stunden|timer)|dygnet\s*runt|døgnåbent/i.test(text))
     return { open: 0, close: 24 };
-
   if (/closed|stängt|geschlossen|lukket/i.test(text)) return null;
 
   const m = text.match(/(\d{1,2})[.:](\d{2})\s*[-–—]\s*(\d{1,2})[.:](\d{2})/);
@@ -696,7 +518,6 @@ function parseHoursRange(text: string): { open: number; close: number } | null {
       close: parseInt(m[3]) + parseInt(m[4]) / 60,
     };
   }
-
   return null;
 }
 
@@ -711,7 +532,7 @@ function formatHourAsTime(h: number): string {
   return `${hrs.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}`;
 }
 
-/* ── Badges ──────────────────────────────────────────── */
+/* ── Badges Component (PRESERVED LOGIC, REDESIGNED UI) ──────────────────────────────────────────── */
 
 type BadgeStatus =
   | { type: "open" }
@@ -732,9 +553,8 @@ function getPlaceStatus(
   const hoursText = hoursData.text ?? place.custom_hours ?? "";
   const range = parseHoursRange(hoursText);
 
-  if (/closed|stängt|geschlossen|lukket/i.test(hoursText)) {
+  if (/closed|stängt|geschlossen|lukket/i.test(hoursText))
     return { type: "closed" };
-  }
 
   if (!range) {
     if (hoursData.isOpenNow) return { type: "open" };
@@ -742,17 +562,13 @@ function getPlaceStatus(
   }
 
   const now = currentHourDecimal();
-
-  if (now >= range.open && now < range.close) {
-    return { type: "open" };
-  }
+  if (now >= range.open && now < range.close) return { type: "open" };
 
   if (scheduledTime) {
     const timeParts = scheduledTime.match(/^(\d{1,2}):(\d{2})$/);
     if (timeParts) {
       const scheduledHour =
         parseInt(timeParts[1]) + parseInt(timeParts[2]) / 60;
-
       if (scheduledHour >= range.open && scheduledHour < range.close) {
         return { type: "opens_at", time: formatHourAsTime(range.open) };
       }
@@ -766,36 +582,16 @@ const badgeLabels: Record<
   string,
   { openNow: string; opensAt: (t: string) => string; closed: string }
 > = {
-  sv: {
-    openNow: "Öppet",
-    opensAt: (t) => `Öppnar ${t}`,
-    closed: "Stängt",
-  },
-  en: {
-    openNow: "Open",
-    opensAt: (t) => `Opens ${t}`,
-    closed: "Closed",
-  },
+  sv: { openNow: "Öppet", opensAt: (t) => `Öppnar ${t}`, closed: "Stängt" },
+  en: { openNow: "Open", opensAt: (t) => `Opens ${t}`, closed: "Closed" },
   de: {
     openNow: "Geöffnet",
     opensAt: (t) => `Öffnet ${t}`,
     closed: "Geschlossen",
   },
-  da: {
-    openNow: "Åben",
-    opensAt: (t) => `Åbner ${t}`,
-    closed: "Lukket",
-  },
-  nl: {
-    openNow: "Open",
-    opensAt: (t) => `Opent ${t}`,
-    closed: "Gesloten",
-  },
-  no: {
-    openNow: "Åpent",
-    opensAt: (t) => `Åpner ${t}`,
-    closed: "Stengt",
-  },
+  da: { openNow: "Åben", opensAt: (t) => `Åbner ${t}`, closed: "Lukket" },
+  nl: { openNow: "Open", opensAt: (t) => `Opent ${t}`, closed: "Gesloten" },
+  no: { openNow: "Åpent", opensAt: (t) => `Åpner ${t}`, closed: "Stengt" },
 };
 
 function Badges({
@@ -815,39 +611,34 @@ function Badges({
   const bl = badgeLabels[lang] ?? badgeLabels.en;
 
   return (
-    <div className="flex shrink-0 items-center gap-1.5">
-      {place.is_on_site && (
-        <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[7px] font-black uppercase tracking-wider text-emerald-600 ring-1 ring-emerald-100">
-          {l.onSite}
+    <>
+      {place.is_on_site ? (
+        <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
+          <MapPin size={10} /> {l.onSite}
         </span>
-      )}
-      {place.is_pinned && !place.is_on_site && (
-        <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[7px] font-black uppercase tracking-wider text-amber-600 ring-1 ring-amber-100">
-          ⭐
+      ) : dist ? (
+        <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-stone-600 bg-stone-100 px-2 py-0.5 rounded border border-stone-200/50">
+          <MapPin size={10} className="text-stone-400" /> {dist}
         </span>
-      )}
-      {dist && !place.is_on_site && (
-        <span className="rounded-full bg-stone-50 px-2 py-[3px] text-[8px] font-bold tabular-nums text-stone-400 ring-1 ring-stone-100">
-          {dist}
-        </span>
-      )}
+      ) : null}
+
       {status.type !== "unknown" && (
         <span
-          className={`flex items-center gap-1 rounded-full px-1.5 py-[3px] text-[7px] font-black uppercase tracking-wider ring-1 ${
+          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-[10px] font-bold uppercase tracking-wider ${
             status.type === "open"
-              ? "bg-emerald-50 text-emerald-600 ring-emerald-100"
+              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
               : status.type === "opens_at"
-                ? "bg-amber-50 text-amber-600 ring-amber-100"
-                : "bg-red-50 text-red-400 ring-red-100"
+                ? "bg-amber-50 text-amber-700 border-amber-200"
+                : "bg-stone-50 text-stone-500 border-stone-200"
           }`}
         >
           <span
             className={`h-1.5 w-1.5 rounded-full ${
               status.type === "open"
-                ? "bg-emerald-400"
+                ? "bg-emerald-500"
                 : status.type === "opens_at"
-                  ? "bg-amber-400"
-                  : "bg-red-300"
+                  ? "bg-amber-500"
+                  : "bg-stone-300"
             }`}
           />
           {status.type === "open"
@@ -857,6 +648,6 @@ function Badges({
               : bl.closed}
         </span>
       )}
-    </div>
+    </>
   );
 }

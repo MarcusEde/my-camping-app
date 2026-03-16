@@ -1,4 +1,5 @@
 // src/components/GuestAppUI.tsx
+// UI REDESIGN: Restored full weather context (wind/rain). Refined Hero typography for a premium feel.
 "use client";
 
 import type {
@@ -21,7 +22,6 @@ import {
 } from "lucide-react";
 import React, { useEffect } from "react";
 
-import { SPRING_LAYOUT, SPRING_SNAP } from "@/lib/constants";
 import { useGuestApp } from "@/lib/hooks/useGuestApp";
 import { applyPWAMeta } from "@/lib/pwa";
 import type { RoadDistanceMap } from "@/lib/routing";
@@ -29,10 +29,8 @@ import {
   getFeelLabel,
   getWelcomeLabel,
   navLabels,
-  weatherConditions,
-  weatherLabels,
+  weatherConditions
 } from "@/lib/translations";
-import { hexToRgba } from "@/lib/utils";
 
 import GuestFeedbackWidget from "./GuestFeedbackWidget";
 import AktiviteterTab from "./tabs/AktiviteterTab";
@@ -70,7 +68,6 @@ export default function GuestAppUI({
     scrollRef,
     switchTab,
     handleDirectionsClick,
-    // ── Saved items (My Stay) ──
     savedIds,
     toggleSaved,
     isSaved,
@@ -82,7 +79,7 @@ export default function GuestAppUI({
     distanceMap,
   });
 
-  const brand = campground.primary_color || "#2A3C34";
+  const brand = campground.primary_color || "#059669";
   const heroImage =
     campground.hero_image_url ||
     "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=800&q=80";
@@ -90,14 +87,20 @@ export default function GuestAppUI({
   const feel = weather ? getFeelLabel(lang, weather.temp) : "";
   const welcomeText = getWelcomeLabel(lang, currentHour);
 
+  // CSS Variables for dynamic white-labeling
+  const themeVars = {
+    "--brand": brand,
+    "--brand-10": `${brand}1A`,
+    "--brand-20": `${brand}33`,
+  } as React.CSSProperties;
+
   return (
     <>
       <PWAMeta brand={brand} />
       <div
-        className="flex h-[100dvh] w-full flex-col bg-[#FDFCFB] font-sans antialiased text-stone-900"
-        style={{ overflow: "hidden" }}
+        className="flex h-[100dvh] w-full flex-col bg-[#F9FAFB] font-sans antialiased text-stone-900 selection:bg-[var(--brand-20)]"
+        style={{ overflow: "hidden", ...themeVars }}
       >
-        {/* Sticky Header */}
         <StickyHeader
           brand={brand}
           campground={campground}
@@ -111,7 +114,6 @@ export default function GuestAppUI({
           style={{ WebkitOverflowScrolling: "touch" }}
         >
           <HeroHeader
-            brand={brand}
             heroImage={heroImage}
             campground={campground}
             weather={weather ?? null}
@@ -123,14 +125,14 @@ export default function GuestAppUI({
 
           <div ref={sentinelRef} className="h-0 w-full" aria-hidden="true" />
 
-          <main className="min-h-[80dvh] bg-[#FDFCFB] px-4 pb-28 pt-5">
+          <main className="min-h-[80dvh] px-4 pb-28 pt-6 max-w-lg mx-auto">
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeTab}
-                initial={{ opacity: 0, y: 8 }}
+                initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.2, ease: "easeOut" }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.25, ease: "easeOut" }}
               >
                 {activeTab === "puls" && (
                   <PulsTab
@@ -144,6 +146,7 @@ export default function GuestAppUI({
                     onDirectionsClick={handleDirectionsClick}
                     savedIds={savedIds}
                     removeSaved={removeSaved}
+                    switchTab={switchTab}
                   />
                 )}
                 {activeTab === "utforska" && (
@@ -195,12 +198,7 @@ export default function GuestAppUI({
           </main>
         </div>
 
-        <BottomNav
-          activeTab={activeTab}
-          lang={lang}
-          brand={brand}
-          switchTab={switchTab}
-        />
+        <BottomNav activeTab={activeTab} lang={lang} switchTab={switchTab} />
       </div>
     </>
   );
@@ -214,7 +212,6 @@ function PWAMeta({ brand }: { brand: string }) {
 }
 
 function StickyHeader({
-  brand,
   campground,
   weather,
   headerCollapsed,
@@ -226,36 +223,29 @@ function StickyHeader({
 }) {
   return (
     <div
-      className="absolute inset-x-0 top-0 z-30 transition-transform duration-300 ease-out"
+      className="absolute inset-x-0 top-0 z-30 transition-transform duration-300 ease-out border-b border-stone-200/50"
       style={{
         transform: headerCollapsed ? "translateY(0)" : "translateY(-100%)",
         paddingTop: "env(safe-area-inset-top, 0px)",
       }}
     >
-      <div
-        className="flex items-center justify-between px-5 py-3 backdrop-blur-2xl"
-        style={{
-          backgroundColor: `${brand}ee`,
-          boxShadow:
-            "0 1px 0 rgba(255,255,255,0.06), 0 4px 20px rgba(0,0,0,0.15)",
-        }}
-      >
-        <div className="flex min-w-0 items-center gap-2.5">
+      <div className="flex items-center justify-between px-5 py-3 bg-white/90 backdrop-blur-xl shadow-sm">
+        <div className="flex min-w-0 items-center gap-3">
           {campground.logo_url && (
             <img
               src={campground.logo_url}
               alt=""
-              className="h-5 w-5 shrink-0 object-contain brightness-0 invert opacity-60"
+              className="h-6 w-6 shrink-0 object-contain rounded-sm"
             />
           )}
-          <h2 className="truncate text-[13px] font-black tracking-tight text-white">
+          <h2 className="truncate text-sm font-semibold tracking-tight text-stone-900">
             {campground.name}
           </h2>
         </div>
         {weather && (
-          <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-white/[0.12] px-2.5 py-1 ring-1 ring-white/[0.08]">
-            <span className="text-xs leading-none">{weather.icon}</span>
-            <span className="text-[11px] font-black text-white">
+          <div className="flex shrink-0 items-center gap-1.5 px-2 py-1">
+            <span className="text-sm leading-none">{weather.icon}</span>
+            <span className="text-sm font-semibold text-stone-900">
               {weather.temp}°
             </span>
           </div>
@@ -266,7 +256,6 @@ function StickyHeader({
 }
 
 function HeroHeader({
-  brand,
   heroImage,
   campground,
   weather,
@@ -275,7 +264,6 @@ function HeroHeader({
   welcomeText,
   feel,
 }: {
-  brand: string;
   heroImage: string;
   campground: Campground;
   weather: WeatherProp | null;
@@ -285,94 +273,80 @@ function HeroHeader({
   feel: string;
 }) {
   return (
-    <header className="relative overflow-hidden" style={{ minHeight: "240px" }}>
-      <div className="absolute inset-0" style={{ backgroundColor: brand }} />
+    <header className="relative w-full h-[40vh] min-h-[300px] max-h-[420px] overflow-hidden">
+      <div className="absolute inset-0 bg-stone-900" />
       <img
         src={heroImage}
         alt=""
-        className="absolute inset-0 h-full w-full object-cover"
+        className="absolute inset-0 h-full w-full object-cover opacity-85"
         style={{
           objectPosition: (campground as any).hero_image_position || "center",
         }}
-        onError={(e) => {
-          e.currentTarget.style.display = "none";
-        }}
       />
+      {/* Sleek vignette gradient to ensure text readability without making the whole image muddy */}
+      <div className="absolute inset-0 bg-gradient-to-t from-stone-900/90 via-stone-900/30 to-stone-900/10" />
+
       <div
-        className="absolute inset-0 mix-blend-multiply opacity-35"
-        style={{ backgroundColor: brand }}
-      />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-black/30" />
-      <div
-        className="relative z-10 flex h-full min-h-[240px] flex-col justify-between px-5 pb-5"
-        style={{ paddingTop: "max(env(safe-area-inset-top, 14px), 14px)" }}
+        className="relative z-10 flex h-full flex-col justify-between px-5 pb-6 max-w-lg mx-auto"
+        style={{ paddingTop: "max(env(safe-area-inset-top, 16px), 16px)" }}
       >
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between w-full">
           <LangSwitcher lang={lang} setLang={setLang} />
           {campground.logo_url && (
             <img
               src={campground.logo_url}
               alt=""
-              className="max-h-7 max-w-[80px] object-contain brightness-0 invert opacity-55"
+              className="max-h-8 max-w-[100px] object-contain drop-shadow-md brightness-0 invert opacity-90"
             />
           )}
         </div>
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/35">
-            {welcomeText}
-          </p>
-          <h1 className="mt-1 truncate text-[clamp(20px,6vw,26px)] font-black leading-[1.06] tracking-tight text-white">
-            {campground.name}
-          </h1>
+
+        <div className="space-y-4">
+          <div>
+            <p className="text-xs font-semibold tracking-wider text-white/80 uppercase">
+              {welcomeText}
+            </p>
+            <h1 className="mt-1 text-3xl font-bold tracking-tight text-white drop-shadow-md">
+              {campground.name}
+            </h1>
+          </div>
+
           {weather && (
-            <WeatherBadge weather={weather} lang={lang} feel={feel} />
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2.5 bg-black/20 backdrop-blur-md border border-white/10 rounded-2xl px-3 py-2">
+                <span className="text-2xl leading-none drop-shadow-sm">
+                  {weather.icon}
+                </span>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-xl font-bold text-white drop-shadow-sm">
+                    {weather.temp}°
+                  </span>
+                  <span className="text-xs font-medium text-white/80 drop-shadow-sm capitalize">
+                    {feel}
+                  </span>
+                </div>
+              </div>
+
+              {/* Restored Wind & Rain contextual data */}
+              <div className="flex items-center gap-2 bg-black/20 backdrop-blur-md border border-white/10 rounded-2xl px-3 py-2">
+                {weather.isRaining ? (
+                  <Droplets size={14} className="text-white/70" />
+                ) : (
+                  <Wind size={14} className="text-white/70" />
+                )}
+                <span className="text-xs font-medium text-white/90">
+                  {weather.isRaining
+                    ? weatherConditions[lang].rain
+                    : weather.windSpeed && weather.windSpeed > 0.5
+                      ? `${weather.windSpeed.toFixed(1)} m/s`
+                      : weatherConditions[lang].calm}
+                </span>
+              </div>
+            </div>
           )}
         </div>
       </div>
     </header>
-  );
-}
-
-function WeatherBadge({
-  weather,
-  lang,
-  feel,
-}: {
-  weather: WeatherProp;
-  lang: Lang;
-  feel: string;
-}) {
-  return (
-    <div className="mt-3 flex items-center gap-2.5 rounded-full bg-white/[0.08] px-3.5 py-2 ring-1 ring-white/[0.07] backdrop-blur-xl">
-      <span className="shrink-0 text-lg leading-none">{weather.icon}</span>
-      <div className="min-w-0 flex-1">
-        <p className="text-[13px] font-black leading-none text-white">
-          {weather.temp}°
-          <span className="ml-0.5 text-[10px] font-semibold text-white/40">
-            C
-          </span>
-          <span className="mx-1.5 text-white/15">·</span>
-          <span className="text-[11px] font-bold text-white/65">{feel}</span>
-        </p>
-        <p className="mt-0.5 text-[9px] font-black uppercase tracking-[0.22em] text-white/30">
-          {weatherLabels[weather.description]?.[lang] ?? weather.description}
-        </p>
-      </div>
-      <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-white/[0.08] px-2 py-1 ring-1 ring-white/[0.06]">
-        {weather.isRaining ? (
-          <Droplets size={10} className="text-white/50" />
-        ) : (
-          <Wind size={10} className="text-white/50" />
-        )}
-        <span className="text-[9px] font-black uppercase tracking-[0.15em] text-white/55">
-          {weather.isRaining
-            ? weatherConditions[lang].rain
-            : weather.windSpeed && weather.windSpeed > 0.5
-              ? `${weather.windSpeed.toFixed(1)} m/s`
-              : weatherConditions[lang].calm}
-        </span>
-      </div>
-    </div>
   );
 }
 
@@ -384,30 +358,25 @@ function LangSwitcher({
   setLang: (l: Lang) => void;
 }) {
   return (
-    <div className="flex w-fit rounded-full bg-black/16 p-[3px] backdrop-blur-xl ring-1 ring-white/[0.06]">
+    <div className="flex w-fit rounded-lg bg-black/30 p-1 backdrop-blur-md ring-1 ring-white/20">
       {(["sv", "en", "de", "da", "nl", "no"] as Lang[]).map((l) => (
-        <motion.button
+        <button
           key={l}
           onClick={() => setLang(l)}
-          className={`relative rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.2em] transition-colors ${
-            lang === l ? "text-stone-900" : "text-white/35 hover:text-white/55"
+          className={`relative px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-colors z-10 ${
+            lang === l ? "text-stone-900" : "text-white/70 hover:text-white"
           }`}
-          whileTap={{ scale: 0.88 }}
-          transition={SPRING_SNAP}
         >
           {lang === l && (
             <motion.div
-              className="absolute inset-0 rounded-full bg-white"
+              className="absolute inset-0 rounded-md bg-white shadow-sm"
               layoutId="lang-pill"
-              transition={SPRING_LAYOUT}
-              style={{
-                boxShadow:
-                  "0 1px 3px rgba(0,0,0,0.07), 0 0 0 0.5px rgba(0,0,0,0.03)",
-              }}
+              transition={{ type: "spring", stiffness: 400, damping: 30 }}
+              style={{ zIndex: -1 }}
             />
           )}
-          <span className="relative z-10">{l}</span>
-        </motion.button>
+          {l}
+        </button>
       ))}
     </div>
   );
@@ -416,82 +385,52 @@ function LangSwitcher({
 function BottomNav({
   activeTab,
   lang,
-  brand,
   switchTab,
 }: {
   activeTab: TabId;
   lang: Lang;
-  brand: string;
   switchTab: (id: TabId) => void;
 }) {
   return (
     <nav
-      className="relative z-30 shrink-0 border-t border-stone-200/40 bg-white/95 backdrop-blur-2xl"
-      style={{
-        paddingBottom: "env(safe-area-inset-bottom, 0px)",
-        boxShadow: "0 -1px 0 rgba(0,0,0,0.025), 0 -6px 20px rgba(0,0,0,0.04)",
-      }}
+      className="relative z-30 shrink-0 border-t border-stone-200 bg-white/95 backdrop-blur-xl"
+      style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     >
-      <div className="px-3 pb-1.5 pt-1.5">
-        <div className="grid grid-cols-5 items-end">
+      <div className="px-2 py-2 max-w-lg mx-auto">
+        <div className="flex justify-between items-center">
           <NavBtn
             id="utforska"
             active={activeTab === "utforska"}
             label={navLabels[lang].utforska}
-            icon={<Compass size={19} strokeWidth={1.8} />}
-            brand={brand}
+            icon={Compass}
             onClick={switchTab}
           />
           <NavBtn
             id="planerare"
             active={activeTab === "planerare"}
             label={navLabels[lang].planerare}
-            icon={<Sparkles size={19} strokeWidth={1.8} />}
-            brand={brand}
+            icon={Sparkles}
             onClick={switchTab}
           />
-          <div className="relative -top-3 flex flex-col items-center">
-            <motion.button
-              onClick={() => switchTab("puls")}
-              className="flex h-[52px] w-[52px] items-center justify-center rounded-full border-[3px] border-[#FDFCFB] text-white"
-              style={{
-                background: `linear-gradient(148deg, ${brand}, ${hexToRgba(brand, 0.7)})`,
-                boxShadow: `0 4px 20px ${hexToRgba(brand, 0.28)}, 0 1px 4px rgba(0,0,0,0.08)`,
-              }}
-              whileTap={{ scale: 0.87 }}
-              transition={SPRING_SNAP}
-            >
-              <Home size={20} strokeWidth={2.4} />
-            </motion.button>
-            <span
-              className="mt-0.5 text-[9px] font-black uppercase tracking-[0.1em] transition-colors duration-150"
-              style={{ color: activeTab === "puls" ? brand : "#a8a29e" }}
-            >
-              {navLabels[lang].puls}
-            </span>
-            {activeTab === "puls" && (
-              <motion.div
-                className="absolute -bottom-1 h-[3px] w-[3px] rounded-full"
-                style={{ backgroundColor: brand }}
-                layoutId="nav-dot"
-                transition={SPRING_LAYOUT}
-              />
-            )}
-          </div>
+          <NavBtn
+            id="puls"
+            active={activeTab === "puls"}
+            label={navLabels[lang].puls}
+            icon={Home}
+            onClick={switchTab}
+          />
           <NavBtn
             id="aktiviteter"
             active={activeTab === "aktiviteter"}
             label={navLabels[lang].aktiviteter}
-            icon={<CalendarHeart size={19} strokeWidth={1.8} />}
-            brand={brand}
+            icon={CalendarHeart}
             onClick={switchTab}
           />
           <NavBtn
             id="info"
             active={activeTab === "info"}
             label={navLabels[lang].info}
-            icon={<Info size={19} strokeWidth={1.8} />}
-            brand={brand}
+            icon={Info}
             onClick={switchTab}
           />
         </div>
@@ -500,52 +439,24 @@ function BottomNav({
   );
 }
 
-function NavBtn({
-  id,
-  active,
-  label,
-  icon,
-  brand,
-  onClick,
-}: {
-  id: TabId;
-  active: boolean;
-  label: string;
-  icon: React.ReactNode;
-  brand: string;
-  onClick: (id: TabId) => void;
-}) {
+function NavBtn({ id, active, label, icon: Icon, onClick }: any) {
   return (
-    <motion.button
+    <button
       onClick={() => onClick(id)}
-      className="relative flex w-full flex-col items-center gap-0.5 py-1.5"
-      whileTap={{ scale: 0.85 }}
-      transition={SPRING_SNAP}
+      className="relative flex flex-1 flex-col items-center gap-1 py-1.5 px-2 transition-transform active:scale-95 outline-none"
     >
-      <div
-        className="flex h-8 w-8 items-center justify-center rounded-[12px] transition-all duration-200"
-        style={
-          active
-            ? { backgroundColor: hexToRgba(brand, 0.09), color: brand }
-            : { color: "#a8a29e" }
-        }
-      >
-        {icon}
-      </div>
+      <Icon
+        size={22}
+        strokeWidth={active ? 2.5 : 2}
+        className={active ? "text-[var(--brand)]" : "text-stone-400"}
+      />
       <span
-        className="text-[9px] font-black uppercase tracking-[0.1em] transition-colors duration-150"
-        style={{ color: active ? brand : "#a8a29e" }}
+        className={`text-[10px] font-medium tracking-wide transition-colors ${
+          active ? "text-[var(--brand)]" : "text-stone-500"
+        }`}
       >
         {label}
       </span>
-      {active && (
-        <motion.div
-          className="absolute -bottom-0.5 h-[3px] w-[3px] rounded-full"
-          style={{ backgroundColor: brand }}
-          layoutId="nav-dot"
-          transition={SPRING_LAYOUT}
-        />
-      )}
-    </motion.button>
+    </button>
   );
 }
