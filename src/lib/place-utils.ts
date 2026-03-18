@@ -1,8 +1,9 @@
 // src/lib/place-utils.ts
 
 import type { UtforskaLabels } from "@/lib/translations";
-import { calculateDistanceKm, formatDistance } from "./distance";
-
+import type { CachedPlace } from "@/types/database";
+import { calculateDistanceKm, formatDistance, getDistanceKm } from "./distance";
+import { parseFormattedDistanceKm, type RoadDistanceMap } from "./routing";
 // ─── Types ────────────────────────────────────────────────
 
 export interface HoursDisplay {
@@ -211,10 +212,21 @@ function calculateIsOpen(
   closeM: number,
 ): boolean {
   const now = new Date();
-  const svTime = new Date(
-    now.toLocaleString("en-US", { timeZone: "Europe/Stockholm" }),
-  );
-  const currentMinutes = svTime.getHours() * 60 + svTime.getMinutes();
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Stockholm",
+    hour: "numeric",
+    minute: "numeric",
+    hour12: false,
+  });
+
+  const parts = formatter.formatToParts(now);
+  const svHourRaw = parseInt(parts.find((p) => p.type === "hour")!.value, 10);
+  const svMinute = parseInt(parts.find((p) => p.type === "minute")!.value, 10);
+
+  // Handle formatting quirk where midnight is sometimes returned as 24 instead of 0
+  const svHour = svHourRaw === 24 ? 0 : svHourRaw;
+  const currentMinutes = svHour * 60 + svMinute;
+
   const openMinutes = openH * 60 + openM;
   let closeMinutes = closeH * 60 + closeM;
 
@@ -258,4 +270,76 @@ export function buildDirectionsMapLink(
   if (name)
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}`;
   return null;
+}
+
+export function calculateRelevanceScore(
+  place: CachedPlace,
+  distanceMap: RoadDistanceMap,
+  campLat: number,
+  campLon: number,
+): number {
+  // ── 1. Absoluta prioriteringar ──────────────────────────────────────
+  if (place.is_pinned) return 10_000;
+  if (place.is_on_site) return 5_000;
+
+  // ── 2. Beräkna fågelvägen (Sanity Check) ──────────────────────────
+  const airKm =
+    place.latitude != null && place.longitude != null
+      ? getDistanceKm(campLat, campLon, place.latitude, place.longitude)
+      : null;
+
+  // ── 3. Lös avståndet smart (Fågelväg vs Bilväg) ───────────────────
+  let distance: number;
+  const roadKm = parseFormattedDistanceKm(distanceMap[place.id] ?? "");
+
+  if (airKm !== null && airKm <= 1.5) {
+    distance = Math.min(airKm, roadKm ?? 999);
+  } else if (roadKm !== null) {
+    distance = roadKm;
+  } else if (airKm !== null) {
+    distance = airKm;
+  } else {
+    return -1000;
+  }
+
+  // ── 4. Kontinuerlig Mjuk Avståndspoäng ───────────────────────────────
+  let score = 3000;
+  if (distance < 2.5) {
+    score += (2.5 - distance) * 1000;
+  }
+  score -= distance * 100;
+
+  // ── 5. Betyg & Kategori-undantag ─────────────────────────────────────
+  if (place.rating) {
+    let ratingMod = (place.rating - 3.5) * 20;
+
+    if (place.category === "shopping") {
+      ratingMod *= 0.1;
+    } else if (place.category === "beach" || place.category === "park") {
+      ratingMod *= 0.4;
+    }
+    score += ratingMod;
+  } else {
+    // SAKNAR BETYG: Straffa platser som Breathe Massage så de sjunker
+    score -= 150;
+  }
+
+  // ── 6. Svensk Kontext (Supermarket-bonusen) ──────────────────────────
+  const nameLower = place.name.toLowerCase();
+  if (place.category === "shopping") {
+    if (
+      nameLower.includes("ica ") ||
+      nameLower.includes("coop ") ||
+      nameLower.includes("willys") ||
+      nameLower.includes("hemköp") ||
+      nameLower.includes("apotek")
+    ) {
+      score += 800; // Tvingar upp riktiga mataffärer över gårdsbutiker!
+    }
+  }
+
+  // ── 7. Tie-breaker ───────────────────────────────────────────────────
+  score += (place.name?.length ?? 0) * 0.5;
+
+  return score;
 }

@@ -1,21 +1,17 @@
-import {
-  createAnnouncement,
-  deleteAnnouncement,
-  updateAnnouncement,
-  updateCampgroundSettings,
-} from "@/app/dashboard/actions";
-import type { Announcement, Campground } from "@/types/database";
+import { updateCampgroundSettings } from "@/app/dashboard/actions";
+import type { Campground } from "@/types/database";
 import { useState, useTransition } from "react";
 
 export type SectionId = "branding" | "contact" | "guest" | "announcements";
 
 interface UseSettingsFormProps {
   campground: Campground;
-  announcements: Announcement[];
 }
 
 export function useSettingsForm({ campground }: UseSettingsFormProps) {
-  const [isPending, startTransition] = useTransition();
+  /* ── Separate transitions so operations don't block each other ── */
+  const [isSaving, startSaveTransition] = useTransition();
+
   const [saved, setSaved] = useState(false);
   const [activeSection, setActiveSection] = useState<SectionId>("branding");
 
@@ -52,25 +48,15 @@ export function useSettingsForm({ campground }: UseSettingsFormProps) {
   );
   const [campRules, setCampRules] = useState(campground.camp_rules || "");
 
-  // ── Announcement form ──
-  const [newTitle, setNewTitle] = useState("");
-  const [newContent, setNewContent] = useState("");
-  const [newType, setNewType] = useState<"info" | "event" | "warning">("info");
-  const [showNewForm, setShowNewForm] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editTitle, setEditTitle] = useState("");
-  const [editContent, setEditContent] = useState("");
-  const [editType, setEditType] = useState<"info" | "event" | "warning">(
-    "info",
-  );
+
 
   // ── Derived ──
   const brand = primaryColor;
 
   // ── Handlers ──
   const handleSave = () => {
-    startTransition(async () => {
+    if (isSaving) return;
+    startSaveTransition(async () => {
       try {
         await updateCampgroundSettings(campground.id, {
           primary_color: primaryColor,
@@ -98,68 +84,11 @@ export function useSettingsForm({ campground }: UseSettingsFormProps) {
     });
   };
 
-  const handleCreateAnnouncement = () => {
-    if (!newTitle.trim() || !newContent.trim()) return;
-    startTransition(async () => {
-      try {
-        await createAnnouncement(campground.id, newTitle, newContent, newType);
-        setNewTitle("");
-        setNewContent("");
-        setNewType("info");
-        setShowNewForm(false);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Unknown error";
-        alert(`Fel: ${msg}`);
-      }
-    });
-  };
 
-  const handleStartEdit = (ann: Announcement) => {
-    setEditingId(ann.id);
-    setEditTitle(ann.title);
-    setEditContent(ann.content);
-    setEditType(ann.type as "info" | "event" | "warning");
-  };
-
-  const handleUpdateAnnouncement = () => {
-    if (!editingId || !editTitle.trim() || !editContent.trim()) return;
-    startTransition(async () => {
-      try {
-        await updateAnnouncement(editingId, editTitle, editContent, editType);
-        setEditingId(null);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Unknown error";
-        alert(`Fel: ${msg}`);
-      }
-    });
-  };
-
-  const handleDeleteAnnouncement = (id: string) => {
-    setDeletingId(id);
-    startTransition(async () => {
-      try {
-        await deleteAnnouncement(id);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Unknown error";
-        alert(`Fel: ${msg}`);
-      } finally {
-        setDeletingId(null);
-      }
-    });
-  };
-
-  const openNewAnnouncementForm = () => {
-    setEditingId(null);
-    setShowNewForm(true);
-  };
-
-  const closeNewAnnouncementForm = () => {
-    setShowNewForm(false);
-  };
 
   return {
     // UI state
-    isPending,
+    isPending: isSaving,
     saved,
     activeSection,
     setActiveSection,
@@ -201,30 +130,7 @@ export function useSettingsForm({ campground }: UseSettingsFormProps) {
     campRules,
     setCampRules,
 
-    // Announcement form
-    newTitle,
-    setNewTitle,
-    newContent,
-    setNewContent,
-    newType,
-    setNewType,
-    showNewForm,
-    deletingId,
-    editingId,
-    editTitle,
-    setEditTitle,
-    editContent,
-    setEditContent,
-    editType,
-    setEditType,
-
     // Handlers
     handleSave,
-    handleCreateAnnouncement,
-    handleStartEdit,
-    handleUpdateAnnouncement,
-    handleDeleteAnnouncement,
-    openNewAnnouncementForm,
-    closeNewAnnouncementForm,
   };
 }

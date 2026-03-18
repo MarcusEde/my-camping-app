@@ -2,7 +2,7 @@
 
 import { useSettingsForm, type SectionId } from "@/lib/hooks/useSettingsForm";
 import { hexToRgba } from "@/lib/utils";
-import type { Announcement, Campground } from "@/types/database";
+import type { Campground } from "@/types/database";
 import {
   Check,
   Clock,
@@ -11,7 +11,6 @@ import {
   Info,
   Loader2,
   MapPin,
-  Megaphone,
   Palette,
   Pencil,
   Phone,
@@ -25,11 +24,7 @@ import {
 import React from "react";
 
 /* ── Constants ───────────────────────────────────────── */
-const ANNOUNCEMENT_TYPES = [
-  { value: "info" as const, label: "Information", emoji: "📢" },
-  { value: "event" as const, label: "Evenemang", emoji: "🎉" },
-  { value: "warning" as const, label: "Varning", emoji: "⚠️" },
-];
+
 
 const COLOR_PRESETS = [
   { color: "#2A3C34", label: "Skog" },
@@ -58,18 +53,16 @@ const TABS: { id: SectionId; label: string; icon: React.ReactNode }[] = [
   { id: "branding", label: "Branding", icon: <Palette size={14} /> },
   { id: "contact", label: "Kontakt", icon: <Phone size={14} /> },
   { id: "guest", label: "Gästinfo", icon: <Info size={14} /> },
-  { id: "announcements", label: "Anslag", icon: <Megaphone size={14} /> },
 ];
 
 /* ── Props ───────────────────────────────────────────── */
 interface Props {
   campground: Campground;
-  announcements: Announcement[];
 }
 
 /* ── Main Component ──────────────────────────────────── */
-export default function SettingsForm({ campground, announcements }: Props) {
-  const s = useSettingsForm({ campground, announcements });
+export default function SettingsForm({ campground }: Props) {
+  const s = useSettingsForm({ campground });
 
   return (
     <div className="space-y-5">
@@ -152,25 +145,6 @@ export default function SettingsForm({ campground, announcements }: Props) {
         />
       )}
 
-      {/* ━━━ ANNOUNCEMENTS ━━━ */}
-      {s.activeSection === "announcements" && (
-        <AnnouncementsSection
-          brand={s.brand}
-          announcements={announcements}
-          showNewForm={s.showNewForm}
-          newTitle={s.newTitle}
-          setNewTitle={s.setNewTitle}
-          newContent={s.newContent}
-          setNewContent={s.setNewContent}
-          newType={s.newType}
-          setNewType={s.setNewType}
-          onOpenNewForm={s.openNewAnnouncementForm}
-          onCloseNewForm={s.closeNewAnnouncementForm}
-          onCreate={s.handleCreateAnnouncement}
-          onStartEdit={s.handleStartEdit}
-          onDelete={s.handleDeleteAnnouncement}
-        />
-      )}
     </div>
   );
 }
@@ -254,13 +228,14 @@ function BrandingSection({
             type="text"
             value={primaryColor}
             onChange={(e) => setPrimaryColor(e.target.value)}
-            className="w-24 rounded-[10px] bg-white px-3 py-2 font-mono text-[12px] font-black text-stone-700 ring-1 ring-stone-200/60 focus:outline-none focus:ring-2"
-            style={{ "--tw-ring-color": hexToRgba(primaryColor, 0.3) } as any}
+            className={`w-24 rounded-[10px] bg-white px-3 py-2 font-mono text-[12px] font-black text-stone-700 ring-1 focus:outline-none focus:ring-2 ${!/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(primaryColor) ? 'ring-red-500' : 'ring-stone-200/60'}`}
+            style={/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(primaryColor) ? { "--tw-ring-color": hexToRgba(primaryColor, 0.3) } as any : {}}
           />
           <span className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-300">
             Egen hex
           </span>
         </div>
+        {!/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(primaryColor) && <p className="mt-1 px-1 text-[10px] font-bold text-red-500">Ogiltig färgkod (t.ex. #FFAA00).</p>}
       </div>
 
       {/* Hero Image with Safe Zone Preview */}
@@ -277,6 +252,7 @@ function BrandingSection({
               onChange={setHeroImage}
               placeholder="https://exempel.se/bild.jpg"
               brand={brand}
+              error={heroImage && !/^https?:\/\/.+/.test(heroImage) ? "Måste vara en giltig URL (http://...)" : undefined}
             />
 
             {heroImage && (
@@ -304,6 +280,7 @@ function BrandingSection({
               onChange={setLogoImage}
               placeholder="https://exempel.se/logga.png"
               brand={brand}
+              error={logoImage && !/^https?:\/\/.+/.test(logoImage) ? "Måste vara en giltig URL (http://...)" : undefined}
             />
           </FieldGroup>
         </div>
@@ -445,6 +422,7 @@ function ContactSection({
             onChange={setPhone}
             placeholder="0123-456 78"
             brand={brand}
+            error={phone && !/^[\d\s\-+]+$/.test(phone) ? "Ogiltigt telefonnummer." : undefined}
           />
         </FieldGroup>
         <FieldGroup icon={<Globe size={14} />} label="E-post" brand={brand}>
@@ -453,6 +431,7 @@ function ContactSection({
             onChange={setEmail}
             placeholder="info@camping.se"
             brand={brand}
+            error={email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? "Ogiltig e-postadress." : undefined}
           />
         </FieldGroup>
         <FieldGroup icon={<MapPin size={14} />} label="Adress" brand={brand}>
@@ -461,6 +440,7 @@ function ContactSection({
             onChange={setAddress}
             placeholder="Strandvägen 1..."
             brand={brand}
+            error={address && address.length > 100 ? "Max 100 tecken." : undefined}
           />
         </FieldGroup>
         <FieldGroup icon={<Clock size={14} />} label="Öppettider" brand={brand}>
@@ -470,6 +450,7 @@ function ContactSection({
             placeholder="Måndag-Fredag: 08:00-20:00"
             rows={3}
             brand={brand}
+            error={receptionHours && receptionHours.length > 250 ? "Max 250 tecken." : undefined}
           />
         </FieldGroup>
       </div>
@@ -478,6 +459,12 @@ function ContactSection({
         isPending={isPending}
         saved={saved}
         brand={brand}
+        disabled={
+          (phone && !/^[\d\s\-+]+$/.test(phone)) ||
+          (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) ||
+          (address && address.length > 100) ||
+          (receptionHours && receptionHours.length > 250) ? true : false
+        }
       />
     </div>
   );
@@ -587,140 +574,7 @@ function GuestSection({
   );
 }
 
-/* ── Announcements Section ─────────────────────────── */
-function AnnouncementsSection({
-  brand,
-  announcements,
-  showNewForm,
-  newTitle,
-  setNewTitle,
-  newContent,
-  setNewContent,
-  newType,
-  setNewType,
-  onOpenNewForm,
-  onCloseNewForm,
-  onCreate,
-  onStartEdit,
-  onDelete,
-}: {
-  brand: string;
-  announcements: Announcement[];
-  showNewForm: boolean;
-  newTitle: string;
-  setNewTitle: (v: string) => void;
-  newContent: string;
-  setNewContent: (v: string) => void;
-  newType: "info" | "event" | "warning";
-  setNewType: (v: "info" | "event" | "warning") => void;
-  onOpenNewForm: () => void;
-  onCloseNewForm: () => void;
-  onCreate: () => void;
-  onStartEdit: (ann: Announcement) => void;
-  onDelete: (id: string) => void;
-}) {
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <SectionLabel label="Anslagstavlan" />
-        {!showNewForm && (
-          <button
-            onClick={onOpenNewForm}
-            className="flex items-center gap-1.5 rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.1em] text-white transition-all active:scale-95"
-            style={{ backgroundColor: brand }}
-          >
-            <Plus size={13} strokeWidth={2.5} /> Nytt anslag
-          </button>
-        )}
-      </div>
 
-      {showNewForm && (
-        <div className="space-y-3 rounded-[16px] p-4 bg-stone-50">
-          <div className="flex items-center justify-between">
-            <p className="text-[12px] font-black">Skapa anslag</p>
-            <button onClick={onCloseNewForm} className="text-stone-400">
-              <X size={12} />
-            </button>
-          </div>
-          <div className="flex gap-1.5">
-            {ANNOUNCEMENT_TYPES.map((at) => (
-              <button
-                key={at.value}
-                onClick={() => setNewType(at.value)}
-                className="px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider transition-all"
-                style={
-                  newType === at.value
-                    ? {
-                        backgroundColor: hexToRgba(brand, 0.1),
-                        color: brand,
-                      }
-                    : { backgroundColor: "white", color: "#a8a29e" }
-                }
-              >
-                {at.emoji} {at.label}
-              </button>
-            ))}
-          </div>
-          <FormInput
-            value={newTitle}
-            onChange={setNewTitle}
-            placeholder="Rubrik..."
-            brand={brand}
-          />
-          <FormTextArea
-            value={newContent}
-            onChange={setNewContent}
-            placeholder="Meddelande..."
-            brand={brand}
-          />
-          <div className="flex gap-2">
-            <button
-              onClick={onCreate}
-              className="px-5 py-2.5 rounded-full text-[10px] font-black uppercase text-white"
-              style={{ backgroundColor: brand }}
-            >
-              Publicera
-            </button>
-            <button
-              onClick={onCloseNewForm}
-              className="text-[10px] font-black text-stone-400"
-            >
-              Avbryt
-            </button>
-          </div>
-        </div>
-      )}
-
-      {announcements.map((ann) => (
-        <div
-          key={ann.id}
-          className="flex items-center justify-between bg-white p-3 rounded-xl border border-stone-100"
-        >
-          <div>
-            <p className="text-[12px] font-bold text-stone-800">{ann.title}</p>
-            <p className="text-[10px] text-stone-400 truncate max-w-[200px]">
-              {ann.content}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => onStartEdit(ann)}
-              className="text-stone-300 hover:text-stone-600 transition-colors"
-            >
-              <Pencil size={12} />
-            </button>
-            <button
-              onClick={() => onDelete(ann.id)}
-              className="text-stone-300 hover:text-red-500 transition-colors"
-            >
-              <Trash2 size={12} />
-            </button>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 /* ══════════════════════════════════════════════════════
    Shared Primitives
@@ -769,12 +623,14 @@ function FormInput({
   onChange,
   placeholder,
   brand,
+  error,
 }: {
   label?: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   brand?: string;
+  error?: string;
 }) {
   return (
     <div className="w-full">
@@ -788,15 +644,12 @@ function FormInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-[10px] bg-white px-3.5 py-2.5 text-[12px] font-medium text-stone-800 ring-1 ring-stone-200/60 placeholder:text-stone-300 focus:outline-none focus:ring-2"
+        className={`w-full rounded-[10px] bg-white px-3.5 py-2.5 text-[12px] font-medium text-stone-800 ring-1 focus:outline-none focus:ring-2 ${error ? 'ring-red-500 placeholder:text-red-300' : 'ring-stone-200/60 placeholder:text-stone-300'}`}
         style={
-          {
-            "--tw-ring-color": brand
-              ? hexToRgba(brand, 0.25)
-              : "rgba(168,162,158,0.4)",
-          } as any
+          !error && brand ? { "--tw-ring-color": hexToRgba(brand, 0.25) } as any : {}
         }
       />
+      {error && <p className="mt-1 px-1 text-[10px] font-bold text-red-500">{error}</p>}
     </div>
   );
 }
@@ -807,28 +660,29 @@ function FormTextArea({
   placeholder,
   rows = 3,
   brand,
+  error,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   rows?: number;
   brand?: string;
+  error?: string;
 }) {
   return (
-    <textarea
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      rows={rows}
-      className="w-full resize-none rounded-[10px] bg-white px-3.5 py-2.5 text-[12px] font-medium text-stone-800 ring-1 ring-stone-200/60 placeholder:text-stone-300 focus:outline-none focus:ring-2"
-      style={
-        {
-          "--tw-ring-color": brand
-            ? hexToRgba(brand, 0.25)
-            : "rgba(168,162,158,0.4)",
-        } as any
-      }
-    />
+    <div>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        rows={rows}
+        className={`w-full resize-none rounded-[10px] bg-white px-3.5 py-2.5 text-[12px] font-medium text-stone-800 ring-1 focus:outline-none focus:ring-2 ${error ? 'ring-red-500 placeholder:text-red-300' : 'ring-stone-200/60 placeholder:text-stone-300'}`}
+        style={
+          !error && brand ? { "--tw-ring-color": hexToRgba(brand, 0.25) } as any : {}
+        }
+      />
+      {error && <p className="mt-1 px-1 text-[10px] font-bold text-red-500">{error}</p>}
+    </div>
   );
 }
 
@@ -837,17 +691,19 @@ function SaveBtn({
   isPending,
   saved,
   brand,
+  disabled,
 }: {
   onClick: () => void;
   isPending: boolean;
   saved: boolean;
   brand: string;
+  disabled?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
-      disabled={isPending}
-      className="flex w-full items-center justify-center gap-2 rounded-full py-3 text-[11px] font-black uppercase tracking-[0.1em] text-white transition-all active:scale-95 disabled:opacity-50"
+      disabled={isPending || disabled}
+      className="flex w-full items-center justify-center gap-2 rounded-full py-3 text-[11px] font-black uppercase tracking-[0.1em] text-white transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
       style={{ backgroundColor: saved ? "#059669" : brand }}
     >
       {isPending ? (

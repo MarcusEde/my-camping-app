@@ -1,4 +1,3 @@
-// src/app/dashboard/qr/page.tsx
 import { createClient } from "@/lib/supabase/server";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -19,23 +18,24 @@ export default async function QRPage() {
 
   if (!campground) redirect("/onboarding");
 
-  // Get base URL from headers (works in both dev and prod)
   const headersList = await headers();
   const host = headersList.get("host") || "localhost:3000";
   const proto = headersList.get("x-forwarded-proto") || "http";
   const baseUrl = `${proto}://${host}`;
 
   return (
-    <div>
+    <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6">
+      {/* Page header */}
       <div className="mb-6">
         <h1 className="text-[20px] font-black tracking-tight text-stone-900">
           QR-kod
         </h1>
-        <p className="mt-1 text-[12px] text-stone-400">
-          Designa och ladda ner en QR-kod som gäster kan skanna för att nå er
-          gästapp.
+        <p className="mt-1 text-[12px] leading-relaxed text-stone-400 max-w-md">
+          Designa en QR-kod som gäster skannar för att nå er gästapp. Ändra
+          mall, färger och text — förhandsvisningen uppdateras direkt.
         </p>
       </div>
+
       <QRDesigner campground={campground} baseUrl={baseUrl} />
     </div>
   );

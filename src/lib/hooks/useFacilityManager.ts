@@ -2,14 +2,21 @@ import { deleteFacility, saveFacility } from "@/app/dashboard/actions";
 import type { InternalLocation } from "@/types/database";
 import { useState, useTransition } from "react";
 
+const ERROR_FALLBACK: Record<string, string> = {
+  sv: "Fel", en: "Error", de: "Fehler",
+  da: "Fejl", nl: "Fout", no: "Feil",
+};
+
 interface UseFacilityManagerProps {
   campgroundId: string;
   facilities: InternalLocation[];
+  lang: string;
 }
 
 export function useFacilityManager({
   campgroundId,
   facilities: initial,
+  lang,
 }: UseFacilityManagerProps) {
   const [isPending, startTransition] = useTransition();
   const [items, setItems] = useState(initial);
@@ -20,6 +27,9 @@ export function useFacilityManager({
 
   const openAddForm = () => setShowAdd(true);
   const closeAddForm = () => setShowAdd(false);
+
+  const errorMsg = (e: unknown) =>
+    e instanceof Error ? e.message : (ERROR_FALLBACK[lang] ?? ERROR_FALLBACK.en);
 
   const handleAdd = () => {
     if (!newName.trim()) return;
@@ -50,7 +60,7 @@ export function useFacilityManager({
         setNewMinutes(1);
         setShowAdd(false);
       } catch (e: unknown) {
-        alert(e instanceof Error ? e.message : "Fel");
+        alert(errorMsg(e));
       }
     });
   };
@@ -61,7 +71,7 @@ export function useFacilityManager({
         await deleteFacility(id);
         setItems((prev) => prev.filter((f) => f.id !== id));
       } catch (e: unknown) {
-        alert(e instanceof Error ? e.message : "Fel");
+        alert(errorMsg(e));
       }
     });
   };
