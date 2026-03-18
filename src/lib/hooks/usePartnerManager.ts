@@ -65,6 +65,15 @@ export function usePartnerManager({
   const [editEndsAt, setEditEndsAt] = useState("");
   const [editCouponCode, setEditCouponCode] = useState("");
 
+  const derivedWebsite = useMemo(() => {
+    const activeId = editingId ? editPlaceId : newPlaceId;
+    if (!activeId) return null;
+    const p = places.find((v) => v.id === activeId);
+    if (!p) return null;
+    const raw = p.raw_data as any;
+    return raw?.website ?? raw?.url ?? null;
+  }, [editingId, editPlaceId, newPlaceId, places]);
+
   // ── Computed ──
   const linkablePlaces = useMemo(
     () =>
@@ -291,6 +300,7 @@ export function usePartnerManager({
     filtered,
     totalClicks,
     activeCount,
+    derivedWebsite,
 
     // Handlers
     handleAdd,

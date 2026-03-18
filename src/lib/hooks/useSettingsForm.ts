@@ -1,25 +1,16 @@
-import {
-  createAnnouncement,
-  deleteAnnouncement,
-  updateAnnouncement,
-  updateCampgroundSettings,
-} from "@/app/dashboard/actions";
-import type { Announcement, Campground } from "@/types/database";
+import { updateCampgroundSettings } from "@/app/dashboard/actions";
+import type { Campground } from "@/types/database";
 import { useState, useTransition } from "react";
 
 export type SectionId = "branding" | "contact" | "guest" | "announcements";
 
 interface UseSettingsFormProps {
   campground: Campground;
-  announcements: Announcement[];
 }
 
 export function useSettingsForm({ campground }: UseSettingsFormProps) {
   /* ── Separate transitions so operations don't block each other ── */
   const [isSaving, startSaveTransition] = useTransition();
-  const [isCreatingAnnouncement, startCreateTransition] = useTransition();
-  const [, startDeleteTransition] = useTransition();
-  const [, startUpdateTransition] = useTransition();
 
   const [saved, setSaved] = useState(false);
   const [activeSection, setActiveSection] = useState<SectionId>("branding");
@@ -57,20 +48,7 @@ export function useSettingsForm({ campground }: UseSettingsFormProps) {
   );
   const [campRules, setCampRules] = useState(campground.camp_rules || "");
 
-  // ── Announcement form ──
-  const [newTitle, setNewTitle] = useState("");
-  const [newContent, setNewContent] = useState("");
-  const [newType, setNewType] = useState<"info" | "event" | "warning">("info");
-  const [showNewForm, setShowNewForm] = useState(false);
-  const [deletingAnnouncementId, setDeletingAnnouncementId] = useState<
-    string | null
-  >(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editTitle, setEditTitle] = useState("");
-  const [editContent, setEditContent] = useState("");
-  const [editType, setEditType] = useState<"info" | "event" | "warning">(
-    "info",
-  );
+
 
   // ── Derived ──
   const brand = primaryColor;
@@ -106,72 +84,11 @@ export function useSettingsForm({ campground }: UseSettingsFormProps) {
     });
   };
 
-  const handleCreateAnnouncement = () => {
-    if (!newTitle.trim() || !newContent.trim() || isCreatingAnnouncement)
-      return;
-    startCreateTransition(async () => {
-      try {
-        await createAnnouncement(campground.id, newTitle, newContent, newType);
-        setNewTitle("");
-        setNewContent("");
-        setNewType("info");
-        setShowNewForm(false);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Unknown error";
-        alert(`Fel: ${msg}`);
-      }
-    });
-  };
 
-  const handleStartEdit = (ann: Announcement) => {
-    setEditingId(ann.id);
-    setEditTitle(ann.title);
-    setEditContent(ann.content);
-    setEditType(ann.type as "info" | "event" | "warning");
-  };
-
-  const handleUpdateAnnouncement = () => {
-    if (!editingId || !editTitle.trim() || !editContent.trim()) return;
-    startUpdateTransition(async () => {
-      try {
-        await updateAnnouncement(editingId, editTitle, editContent, editType);
-        setEditingId(null);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Unknown error";
-        alert(`Fel: ${msg}`);
-      }
-    });
-  };
-
-  const handleDeleteAnnouncement = (id: string) => {
-    if (deletingAnnouncementId) return;
-    setDeletingAnnouncementId(id);
-    startDeleteTransition(async () => {
-      try {
-        await deleteAnnouncement(id);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Unknown error";
-        alert(`Fel: ${msg}`);
-      } finally {
-        setDeletingAnnouncementId(null);
-      }
-    });
-  };
-
-  const openNewAnnouncementForm = () => {
-    setEditingId(null);
-    setShowNewForm(true);
-  };
-
-  const closeNewAnnouncementForm = () => {
-    setShowNewForm(false);
-  };
 
   return {
     // UI state
     isPending: isSaving,
-    isCreatingAnnouncement,
-    deletingAnnouncementId,
     saved,
     activeSection,
     setActiveSection,
@@ -213,29 +130,7 @@ export function useSettingsForm({ campground }: UseSettingsFormProps) {
     campRules,
     setCampRules,
 
-    // Announcement form
-    newTitle,
-    setNewTitle,
-    newContent,
-    setNewContent,
-    newType,
-    setNewType,
-    showNewForm,
-    editingId,
-    editTitle,
-    setEditTitle,
-    editContent,
-    setEditContent,
-    editType,
-    setEditType,
-
     // Handlers
     handleSave,
-    handleCreateAnnouncement,
-    handleStartEdit,
-    handleUpdateAnnouncement,
-    handleDeleteAnnouncement,
-    openNewAnnouncementForm,
-    closeNewAnnouncementForm,
   };
 }

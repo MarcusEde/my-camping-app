@@ -646,12 +646,15 @@ function PlaceCard({
               onChange={(e) => onNoteTextChange(e.target.value)}
               placeholder="T.ex. Boka bord i förväg på helger!"
               autoFocus
-              className="flex-1 rounded-lg border-0 bg-white px-3.5 py-2.5 text-sm text-stone-800 shadow-sm ring-1 ring-stone-200 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className={`flex-1 rounded-lg border-0 bg-white px-3.5 py-2.5 text-sm text-stone-800 shadow-sm ring-1 focus:outline-none focus:ring-2 focus:ring-emerald-500 ${noteText.length > 500 ? 'ring-red-500 placeholder:text-red-300' : 'ring-stone-200 placeholder:text-stone-400'}`}
               onKeyDown={(e) => {
-                if (e.key === "Enter") onSaveNote();
+                if (e.key === "Enter" && noteText.length <= 500) onSaveNote();
                 if (e.key === "Escape") onCancelNoteEdit();
               }}
             />
+          </div>
+          {noteText.length > 500 && <p className="mt-1 text-[10px] font-bold text-red-500">Max 500 tecken.</p>}
+          <div className="flex gap-2 min-w-0 flex-1">
             <button
               onClick={onCancelNoteEdit}
               className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-500 shadow-sm transition-all hover:bg-stone-50 active:scale-[0.98]"
@@ -660,7 +663,7 @@ function PlaceCard({
             </button>
             <button
               onClick={onSaveNote}
-              disabled={isPending}
+              disabled={isPending || noteText.length > 500}
               className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-50"
             >
               {isBusy ? (
@@ -901,8 +904,9 @@ function AddPlaceForm({
               value={name}
               onChange={(e) => onNameChange(e.target.value)}
               placeholder="T.ex. Minigolf eller Cykeluthyrning"
-              className="w-full rounded-lg border-0 bg-white px-3.5 py-2.5 text-sm text-stone-800 shadow-sm ring-1 ring-stone-200 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className={`w-full rounded-lg border-0 bg-white px-3.5 py-2.5 text-sm text-stone-800 shadow-sm ring-1 focus:outline-none focus:ring-2 focus:ring-emerald-500 ${name.length > 100 ? 'ring-red-500 placeholder:text-red-300' : 'ring-stone-200 placeholder:text-stone-400'}`}
             />
+            {name.length > 100 && <p className="mt-1 text-[10px] font-bold text-red-500">Max 100 tecken.</p>}
           </div>
 
           <div>
@@ -914,8 +918,9 @@ function AddPlaceForm({
               value={address}
               onChange={(e) => onAddressChange(e.target.value)}
               placeholder="Krävs om inte på området"
-              className="w-full rounded-lg border-0 bg-white px-3.5 py-2.5 text-sm text-stone-800 shadow-sm ring-1 ring-stone-200 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className={`w-full rounded-lg border-0 bg-white px-3.5 py-2.5 text-sm text-stone-800 shadow-sm ring-1 focus:outline-none focus:ring-2 focus:ring-emerald-500 ${address.length > 100 ? 'ring-red-500 placeholder:text-red-300' : 'ring-stone-200 placeholder:text-stone-400'}`}
             />
+            {address.length > 100 && <p className="mt-1 text-[10px] font-bold text-red-500">Max 100 tecken.</p>}
           </div>
 
           <div>
@@ -1012,8 +1017,9 @@ function AddPlaceForm({
               value={customHours}
               onChange={(e) => onCustomHoursChange(e.target.value)}
               placeholder="T.ex. 09:00–18:00 eller Mån–Fre 10–17"
-              className="w-full rounded-lg border-0 bg-stone-50 px-3.5 py-2.5 text-sm text-stone-800 ring-1 ring-stone-100 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className={`w-full rounded-lg border-0 bg-stone-50 px-3.5 py-2.5 text-sm text-stone-800 ring-1 focus:outline-none focus:ring-2 focus:ring-emerald-500 ${customHours.length > 50 ? 'ring-red-500 placeholder:text-red-300' : 'ring-stone-100 placeholder:text-stone-400'}`}
             />
+            {customHours.length > 50 && <p className="mt-1 text-[10px] font-bold text-red-500">Max 50 tecken.</p>}
           </div>
         </div>
       </div>
@@ -1035,7 +1041,7 @@ function AddPlaceForm({
           </button>
           <button
             onClick={onAdd}
-            disabled={!isValid || isPending}
+            disabled={!isValid || isPending || name.length > 100 || address.length > 100 || customHours.length > 50}
             className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-6 py-2.5 text-xs font-semibold text-white shadow-sm transition-all hover:bg-emerald-700 hover:shadow-md active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isPending ? (

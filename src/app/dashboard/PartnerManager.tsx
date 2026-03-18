@@ -91,6 +91,7 @@ export default function PartnerManager({
           onEndsAtChange={s.setNewEndsAt}
           couponCode={s.newCouponCode}
           onCouponCodeChange={s.setNewCouponCode}
+          derivedWebsite={s.derivedWebsite}
           onSubmit={s.handleAdd}
           onCancel={s.resetAddForm}
         />
@@ -139,6 +140,7 @@ export default function PartnerManager({
                       onEndsAtChange={s.setEditEndsAt}
                       couponCode={s.editCouponCode}
                       onCouponCodeChange={s.setEditCouponCode}
+                      derivedWebsite={s.derivedWebsite}
                       onSubmit={s.handleUpdate}
                       onCancel={s.handleCancelEdit}
                     />
@@ -456,6 +458,7 @@ interface PartnerFormProps {
   onEndsAtChange: (v: string) => void;
   couponCode: string;
   onCouponCodeChange: (v: string) => void;
+  derivedWebsite?: string | null;
   onSubmit: () => void;
   onCancel: () => void;
 }
@@ -485,12 +488,46 @@ function PartnerForm({
   onEndsAtChange,
   couponCode,
   onCouponCodeChange,
+  derivedWebsite,
   onSubmit,
   onCancel,
 }: PartnerFormProps) {
-  const ringStyle = {
-    "--tw-ring-color": hexToRgba(brand, 0.25),
-  } as React.CSSProperties;
+  const [errors, setErrors] = React.useState<Record<string, string>>({});
+
+  const validate = () => {
+    const errs: Record<string, string> = {};
+    if (!name.trim()) errs.name = "Företagsnamn är obligatoriskt.";
+    else if (name.length > 50) errs.name = "Max 50 tecken.";
+
+    if (description && description.length > 250) errs.description = "Max 250 tecken.";
+    
+    // Website format check (simple)
+    if (website && !/^https?:\/\/.+/.test(website)) errs.website = "Måste börja med http:// eller https://";
+    // Phone check (basic)
+    if (phone && !/^[\d\s\-+]+$/.test(phone)) errs.phone = "Ogiltigt format.";
+    // Logo check
+    if (logoUrl && !/^https?:\/\/.+/.test(logoUrl)) errs.logoUrl = "Måste börja med http:// eller https://";
+    // Rank
+    if (rank < 0 || rank > 100) errs.rank = "Måste vara 0-100.";
+    // Dates
+    if (startsAt && endsAt && new Date(startsAt) > new Date(endsAt)) errs.dates = "Slutdatum före startdatum.";
+    // Coupon
+    if (couponCode && couponCode.length > 20) errs.couponCode = "Max 20 tecken.";
+
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const handleBlur = () => validate();
+  
+  const handleTrySubmit = () => {
+    if (validate()) onSubmit();
+  };
+
+  const hasErr = (field: string) => !!errors[field];
+  const ringStyle = (field: string) => ({
+    "--tw-ring-color": hasErr(field) ? "rgb(239, 68, 68)" : hexToRgba(brand, 0.25),
+  }) as React.CSSProperties;
 
   return (
     <div
@@ -517,10 +554,12 @@ function PartnerForm({
           type="text"
           value={name}
           onChange={(e) => onNameChange(e.target.value)}
+          onBlur={handleBlur}
           placeholder='T.ex. "Roma Pizzeria (Sponsored)"'
-          className="w-full rounded-[10px] bg-white px-3.5 py-2.5 text-[12px] font-medium text-stone-800 ring-1 ring-stone-200/60 placeholder:text-stone-300 focus:outline-none focus:ring-2"
-          style={ringStyle}
+          className={`w-full rounded-[10px] bg-white px-3.5 py-2.5 text-[12px] font-medium text-stone-800 ring-1 focus:outline-none focus:ring-2 ${hasErr('name') ? 'ring-red-500 placeholder:text-red-300' : 'ring-stone-200/60 placeholder:text-stone-300'}`}
+          style={ringStyle('name')}
         />
+        {errors.name && <p className="mt-1 px-1 text-[10px] font-bold text-red-500">{errors.name}</p>}
       </div>
 
       <div>
@@ -530,11 +569,13 @@ function PartnerForm({
         <textarea
           value={description}
           onChange={(e) => onDescriptionChange(e.target.value)}
+          onBlur={handleBlur}
           placeholder="T.ex. Visa appen i kassan för 10% rabatt..."
           rows={2}
-          className="w-full resize-none rounded-[10px] bg-white px-3.5 py-2.5 text-[12px] font-medium text-stone-800 ring-1 ring-stone-200/60 placeholder:text-stone-300 focus:outline-none focus:ring-2"
-          style={ringStyle}
+          className={`w-full resize-none rounded-[10px] bg-white px-3.5 py-2.5 text-[12px] font-medium text-stone-800 ring-1 focus:outline-none focus:ring-2 ${hasErr('description') ? 'ring-red-500 placeholder:text-red-300' : 'ring-stone-200/60 placeholder:text-stone-300'}`}
+          style={ringStyle('description')}
         />
+        {errors.description && <p className="mt-1 px-1 text-[10px] font-bold text-red-500">{errors.description}</p>}
       </div>
 
       {/* ── Coupon Code field ── */}
@@ -547,11 +588,13 @@ function PartnerForm({
           type="text"
           value={couponCode}
           onChange={(e) => onCouponCodeChange(e.target.value.toUpperCase())}
+          onBlur={handleBlur}
           placeholder='T.ex. "CAMPING20"'
-          className="w-full rounded-[10px] bg-white px-3.5 py-2.5 font-mono text-[12px] font-bold uppercase tracking-widest text-stone-800 ring-1 ring-stone-200/60 placeholder:font-sans placeholder:font-medium placeholder:normal-case placeholder:tracking-normal placeholder:text-stone-300 focus:outline-none focus:ring-2"
-          style={ringStyle}
+          className={`w-full rounded-[10px] bg-white px-3.5 py-2.5 font-mono text-[12px] font-bold uppercase tracking-widest text-stone-800 ring-1 focus:outline-none focus:ring-2 placeholder:font-sans placeholder:font-medium placeholder:normal-case placeholder:tracking-normal ${hasErr('couponCode') ? 'ring-red-500 placeholder:text-red-300' : 'ring-stone-200/60 placeholder:text-stone-300'}`}
+          style={ringStyle('couponCode')}
         />
-        <p className="mt-1 px-1 text-[10px] leading-relaxed text-stone-300">
+        {errors.couponCode && <p className="mt-1 px-1 text-[10px] font-bold text-red-500">{errors.couponCode}</p>}
+        <p className="mt-1 px-1 text-[10px] leading-relaxed text-stone-400">
           Gäster klickar &quot;Hämta rabatt&quot; för att se koden — varje klick
           spåras som en inlöst kupong.
         </p>
@@ -560,56 +603,73 @@ function PartnerForm({
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <div>
           <label className="mb-1 block text-[9px] font-black uppercase tracking-[0.2em] text-stone-300">
-            Webbplats
+            Webbplats (Frivilligt)
           </label>
           <div className="relative">
-            <Globe
-              size={13}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-300"
-            />
-            <input
-              type="url"
-              value={website}
-              onChange={(e) => onWebsiteChange(e.target.value)}
-              placeholder="https://..."
-              className="w-full rounded-[10px] bg-white py-2.5 pl-9 pr-3 text-[12px] font-medium text-stone-800 ring-1 ring-stone-200/60 placeholder:text-stone-300 focus:outline-none focus:ring-2"
-              style={ringStyle}
-            />
+            {derivedWebsite ? (
+               <div className="w-full rounded-[10px] bg-stone-100 py-2.5 pl-3 pr-3 text-[12px] font-medium text-stone-500 ring-1 ring-stone-200/60 truncate cursor-not-allowed flex flex-col">
+                 <span className="text-[9px] font-bold uppercase tracking-wider text-stone-400 leading-none mb-1 text-ellipsis overflow-hidden">
+                   Från {linkablePlaces.find(p=>p.id===placeId)?.name || 'Google Places'}
+                 </span>
+                 <span className="truncate">{derivedWebsite}</span>
+               </div>
+            ) : (
+              <>
+                <Globe
+                  size={13}
+                  className={`absolute left-3 top-1/2 -translate-y-1/2 ${hasErr('website') ? 'text-red-400' : 'text-stone-300'}`}
+                />
+                <input
+                  type="url"
+                  value={website}
+                  onChange={(e) => onWebsiteChange(e.target.value)}
+                  onBlur={handleBlur}
+                  placeholder="https://..."
+                  className={`w-full rounded-[10px] bg-white py-2.5 pl-9 pr-3 text-[12px] font-medium text-stone-800 ring-1 focus:outline-none focus:ring-2 ${hasErr('website') ? 'ring-red-500 placeholder:text-red-300' : 'ring-stone-200/60 placeholder:text-stone-300'}`}
+                  style={ringStyle('website')}
+                />
+              </>
+            )}
           </div>
+          {errors.website && <p className="mt-1 px-1 text-[10px] font-bold text-red-500">{errors.website}</p>}
         </div>
         <div>
           <label className="mb-1 block text-[9px] font-black uppercase tracking-[0.2em] text-stone-300">
-            Telefon
+            Telefon (Frivilligt)
           </label>
           <div className="relative">
             <Phone
               size={13}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-300"
+              className={`absolute left-3 top-1/2 -translate-y-1/2 ${hasErr('phone') ? 'text-red-400' : 'text-stone-300'}`}
             />
             <input
               type="tel"
               value={phone}
               onChange={(e) => onPhoneChange(e.target.value)}
+              onBlur={handleBlur}
               placeholder="070-123 45 67"
-              className="w-full rounded-[10px] bg-white py-2.5 pl-9 pr-3 text-[12px] font-medium text-stone-800 ring-1 ring-stone-200/60 placeholder:text-stone-300 focus:outline-none focus:ring-2"
-              style={ringStyle}
+              className={`w-full rounded-[10px] bg-white py-2.5 pl-9 pr-3 text-[12px] font-medium text-stone-800 ring-1 focus:outline-none focus:ring-2 ${hasErr('phone') ? 'ring-red-500 placeholder:text-red-300' : 'ring-stone-200/60 placeholder:text-stone-300'}`}
+              style={ringStyle('phone')}
             />
           </div>
+          {errors.phone && <p className="mt-1 px-1 text-[10px] font-bold text-red-500">{errors.phone}</p>}
         </div>
       </div>
 
       <div>
         <label className="mb-1 block text-[9px] font-black uppercase tracking-[0.2em] text-stone-300">
-          Logotyp (URL)
+          Logotyp (URL) (Frivilligt)
         </label>
         <input
           type="url"
           value={logoUrl}
           onChange={(e) => onLogoUrlChange(e.target.value)}
+          onBlur={handleBlur}
           placeholder="https://example.com/logo.png"
-          className="w-full rounded-[10px] bg-white px-3.5 py-2.5 text-[12px] font-medium text-stone-800 ring-1 ring-stone-200/60 placeholder:text-stone-300 focus:outline-none focus:ring-2"
-          style={ringStyle}
+          className={`w-full rounded-[10px] bg-white px-3.5 py-2.5 text-[12px] font-medium text-stone-800 ring-1 focus:outline-none focus:ring-2 ${hasErr('logoUrl') ? 'ring-red-500 placeholder:text-red-300' : 'ring-stone-200/60 placeholder:text-stone-300'}`}
+          style={ringStyle('logoUrl')}
         />
+        {errors.logoUrl && <p className="mt-1 px-1 text-[10px] font-bold text-red-500">{errors.logoUrl}</p>}
       </div>
 
       <div>
@@ -621,7 +681,7 @@ function PartnerForm({
           value={placeId}
           onChange={(e) => onPlaceIdChange(e.target.value)}
           className="w-full rounded-[10px] bg-white px-3.5 py-2.5 text-[12px] font-medium text-stone-800 ring-1 ring-stone-200/60 focus:outline-none focus:ring-2"
-          style={ringStyle}
+          style={ringStyle('placeId')}
         >
           <option value="">— Ingen koppling —</option>
           {linkablePlaces.map((pl) => (
@@ -640,11 +700,14 @@ function PartnerForm({
           <input
             type="number"
             min={0}
+            max={100}
             value={rank}
             onChange={(e) => onRankChange(parseInt(e.target.value) || 0)}
-            className="w-full rounded-[10px] bg-white px-3.5 py-2.5 text-[12px] font-medium text-stone-800 ring-1 ring-stone-200/60 focus:outline-none focus:ring-2"
-            style={ringStyle}
+            onBlur={handleBlur}
+            className={`w-full rounded-[10px] bg-white px-3.5 py-2.5 text-[12px] font-medium text-stone-800 ring-1 focus:outline-none focus:ring-2 ${hasErr('rank') ? 'ring-red-500 placeholder:text-red-300' : 'ring-stone-200/60 placeholder:text-stone-300'}`}
+            style={ringStyle('rank')}
           />
+          {errors.rank && <p className="mt-1 px-1 text-[10px] font-bold text-red-500">{errors.rank}</p>}
         </div>
         <div>
           <label className="mb-1 block text-[9px] font-black uppercase tracking-[0.2em] text-stone-300">
@@ -654,8 +717,9 @@ function PartnerForm({
             type="datetime-local"
             value={startsAt}
             onChange={(e) => onStartsAtChange(e.target.value)}
-            className="w-full rounded-[10px] bg-white px-3 py-2.5 text-[11px] font-medium text-stone-800 ring-1 ring-stone-200/60 focus:outline-none focus:ring-2"
-            style={ringStyle}
+            onBlur={handleBlur}
+            className={`w-full rounded-[10px] bg-white px-3 py-2.5 text-[11px] font-medium text-stone-800 ring-1 focus:outline-none focus:ring-2 ${hasErr('dates') ? 'ring-red-500 placeholder:text-red-300' : 'ring-stone-200/60 placeholder:text-stone-300'}`}
+            style={ringStyle('dates')}
           />
         </div>
         <div>
@@ -666,15 +730,17 @@ function PartnerForm({
             type="datetime-local"
             value={endsAt}
             onChange={(e) => onEndsAtChange(e.target.value)}
-            className="w-full rounded-[10px] bg-white px-3 py-2.5 text-[11px] font-medium text-stone-800 ring-1 ring-stone-200/60 focus:outline-none focus:ring-2"
-            style={ringStyle}
+            onBlur={handleBlur}
+            className={`w-full rounded-[10px] bg-white px-3 py-2.5 text-[11px] font-medium text-stone-800 ring-1 focus:outline-none focus:ring-2 ${hasErr('dates') ? 'ring-red-500 placeholder:text-red-300' : 'ring-stone-200/60 placeholder:text-stone-300'}`}
+            style={ringStyle('dates')}
           />
+          {errors.dates && <p className="mt-1 px-1 text-[10px] font-bold text-red-500">{errors.dates}</p>}
         </div>
       </div>
 
       <div className="flex gap-2 pt-1">
         <button
-          onClick={onSubmit}
+          onClick={handleTrySubmit}
           disabled={!name.trim() || isPending}
           className="flex items-center gap-1.5 rounded-full px-5 py-2.5 text-[10px] font-black uppercase tracking-[0.1em] text-white transition-all active:scale-95 disabled:opacity-50"
           style={{

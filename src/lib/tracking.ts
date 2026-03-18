@@ -3,6 +3,8 @@
 
 import { createClient } from "@/lib/supabase/client";
 
+const trackedSaves = new Set<string>();
+
 export function trackPageView(
   campgroundId: string,
   sessionId: string,
@@ -54,7 +56,11 @@ export function trackSavedPlace(
   placeId: string,
   sessionId: string,
 ) {
+  const cacheKey = `${sessionId}_${placeId}`;
+  if (trackedSaves.has(cacheKey)) return; // Stop duplicate clicks
+
   try {
+    trackedSaves.add(cacheKey); // Mark as tracked
     const supabase = createClient();
     void supabase
       .from("saved_places_analytics")
@@ -65,10 +71,10 @@ export function trackSavedPlace(
       })
       .then(
         () => {},
-        () => {},
+        () => { trackedSaves.delete(cacheKey); }, // Revert if DB fails
       );
   } catch {
-    // Silent — never break the guest experience
+    trackedSaves.delete(cacheKey); // Revert on crash
   }
 }
 
@@ -118,3 +124,4 @@ export async function submitGuestFeedback(
     return false;
   }
 }
+

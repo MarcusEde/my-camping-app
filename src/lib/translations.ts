@@ -1,50 +1,15 @@
-import type { Announcement, PromotedPartner } from "@/types/database";
+import type { Campground, PromotedPartner } from "@/types/database";
 import type { Lang, TabId } from "@/types/guest";
 
 export const navLabels: Record<Lang, Record<TabId, string>> = {
-  sv: {
-    utforska: "Utforska",
-    planerare: "Planerare",
-    puls: "Hem",
-    aktiviteter: "Aktiviteter",
-    info: "Info",
-  },
-  en: {
-    utforska: "Explore",
-    planerare: "Planner",
-    puls: "Home",
-    aktiviteter: "Activities",
-    info: "Info",
-  },
-  de: {
-    utforska: "Entdecken",
-    planerare: "Planer",
-    puls: "Start",
-    aktiviteter: "Aktivitäten",
-    info: "Info",
-  },
-  da: {
-    utforska: "Udforsk",
-    planerare: "Planlægger",
-    puls: "Hjem",
-    aktiviteter: "Aktiviteter",
-    info: "Info",
-  },
-  nl: {
-    utforska: "Ontdekken",
-    planerare: "Planner",
-    puls: "Home",
-    aktiviteter: "Activiteiten",
-    info: "Info",
-  },
-  no: {
-    utforska: "Utforsk",
-    planerare: "Planlegger",
-    puls: "Hjem",
-    aktiviteter: "Aktiviteter",
-    info: "Info",
-  },
+  sv: { here: "Hem",      explore: "Utforska",  saved: "Sparade"   },
+  en: { here: "Here",     explore: "Explore",   saved: "Saved"     },
+  de: { here: "Start",    explore: "Entdecken", saved: "Gespeichert" },
+  da: { here: "Hjem",     explore: "Udforsk",   saved: "Gemte"     },
+  nl: { here: "Home",     explore: "Ontdekken", saved: "Opgeslagen" },
+  no: { here: "Hjem",     explore: "Utforsk",   saved: "Lagrede"   },
 };
+
 export const weatherLabels: Record<string, Record<Lang, string>> = {
   clear: {
     sv: "Klart",
@@ -958,17 +923,7 @@ export const aktiviteterLabels: Record<Lang, AktiviteterLabels> = {
 
 // ── Content translation helpers ───────────────────────────
 
-export function getAnnouncementText(
-  ann: Announcement,
-  lang: Lang,
-): { title: string; content: string } {
-  if (lang === "sv") return { title: ann.title, content: ann.content };
-  const tr = ann.translations?.[lang as "en" | "de" | "da"];
-  return {
-    title: tr?.title || ann.title,
-    content: tr?.content || ann.content,
-  };
-}
+
 
 export function getPartnerText(
   partner: PromotedPartner,
@@ -1140,3 +1095,61 @@ export const statusGateCTALabels: Record<
     visitWebsite: "Besøk nettside",
   },
 };
+
+export function getCampgroundText(
+  campground: Campground,
+  field: 'check_out_info' | 'trash_rules' |
+    'camp_rules' | 'emergency_info' |
+    'reception_hours',
+  lang: Lang
+): string {
+  if (lang === 'sv') {
+    return (campground as any)[field] ?? ''
+  }
+  const t = campground
+    .settings_translations as
+    Record<string,
+      Record<string, string>> | null
+  return t?.[lang]?.[field]
+    ?? (campground as any)[field]
+    ?? ''
+}
+
+export function getAnnouncementText(
+  announcement: {
+    title: string
+    content: string
+    translations?: Record<string,
+      { title: string; content: string }
+    > | null
+  },
+  field: 'title' | 'content',
+  lang: Lang
+): string {
+  if (lang === 'sv') {
+    return announcement[field] ?? ''
+  }
+  return announcement
+    .translations?.[lang]?.[field]
+    ?? announcement[field]
+    ?? ''
+}
+
+export function getOwnerNote(
+  place: {
+    owner_note?: string | null
+    note_translations?: Record<string,
+      string> | null
+  },
+  lang: Lang
+): string | null {
+  if (lang === 'sv') {
+    return place.owner_note ?? null
+  }
+  const t = place
+    .note_translations?.[lang]
+  if (t && t.trim().length > 0) {
+    return t
+  }
+  return place.owner_note ?? null
+}

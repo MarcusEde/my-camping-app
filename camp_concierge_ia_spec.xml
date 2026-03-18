@@ -1,0 +1,344 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ia_specification project="Camp Concierge" version="2.0" audience="claude-opus" intent="information_architecture_redesign">
+
+  <meta>
+    <description>Complete IA redesign for Camp Concierge — a B2B SaaS for campground owners with a PWA guest app. This document defines the target navigation structure, content placement rules, feature consolidation logic, and UI pattern recommendations. Use this as ground truth when generating code, UI components, or further design documentation.</description>
+    <scope>
+      <interface id="guest_app" type="PWA" users="campers" paradigm="mobile_first" />
+      <interface id="owner_dashboard" type="B2B_SaaS" users="campground_owners" paradigm="desktop_first_responsive" />
+    </scope>
+    <design_principles>
+      <principle id="P1">Ruthless consolidation — no feature duplication across navigation items</principle>
+      <principle id="P2">Intent-driven grouping — group by when/why the user needs a feature, not what the feature does</principle>
+      <principle id="P3">Progressive disclosure — secondary content is hidden until contextually triggered</principle>
+      <principle id="P4">Flat hierarchy — maximum two navigation levels; eliminate nested tab patterns</principle>
+      <principle id="P5">Single source of truth — each piece of data has exactly one authoritative location in the UI</principle>
+    </design_principles>
+  </meta>
+
+  <!-- ============================================================ -->
+  <!-- AUDIT: WHY THE CURRENT ARCHITECTURE FAILS                    -->
+  <!-- ============================================================ -->
+  <audit>
+    <failure id="A1" severity="critical" affects="guest_app">
+      <label>Five tabs answer the same question</label>
+      <detail>Tabs Puls, Utforska, Planeraren, Aktiviteter, and Info all answer "what is there to do or know here?" This is one information need expressed across five navigation items, causing campers to check multiple tabs to feel confident they have complete information.</detail>
+    </failure>
+    <failure id="A2" severity="critical" affects="guest_app">
+      <label>Wi-Fi credentials duplicated across two tabs</label>
+      <detail>Wi-Fi network and password appear on both Puls (tab 1) and Info (tab 5). This violates principle P5. Users learn to distrust both sources.</detail>
+    </failure>
+    <failure id="A3" severity="high" affects="guest_app">
+      <label>AI Planner is a feature masquerading as a tab</label>
+      <detail>Planeraren generates a time-blocked itinerary from existing Place data. It is a derivation of Utforska content, not an independent content category. Giving it a dedicated tab inflates navigation count for a single action.</detail>
+    </failure>
+    <failure id="A4" severity="high" affects="guest_app">
+      <label>Hero section creates excessive visual overhead before any content</label>
+      <detail>Sticky header + hero image + language switcher + weather pill + wind/rain pill + delayed feedback widget all load before the user encounters actionable content. Decoration is competing with function.</detail>
+    </failure>
+    <failure id="A5" severity="critical" affects="owner_dashboard">
+      <label>Facility Manager is a permanent squatter inside Settings</label>
+      <detail>Facilities are pinned to the bottom of Settings regardless of which Settings sub-tab is active. Facilities are a type of operational Place, not a configuration item. This is both wrong categorisation and a broken layout pattern.</detail>
+    </failure>
+    <failure id="A6" severity="high" affects="owner_dashboard">
+      <label>QR Code is hidden as a utility link outside the main navigation</label>
+      <detail>The QR poster is the primary physical touchpoint that drives guest app adoption. Hiding it as a floating utility link — outside all nav groups — makes the most important marketing output the hardest thing to find.</detail>
+    </failure>
+    <failure id="A7" severity="high" affects="owner_dashboard">
+      <label>Settings uses nested pill-tabs inside a sidebar — double nesting</label>
+      <detail>Settings contains four sub-tabs (Branding, Kontakt, Gästinfo, Anslag) rendered as pills within an already-nested sidebar. Announcements (Anslag) is a daily operational task trapped inside a configuration screen. This creates a "nested tab hell" pattern.</detail>
+    </failure>
+  </audit>
+
+  <!-- ============================================================ -->
+  <!-- INTERFACE 1: GUEST APP REDESIGN                              -->
+  <!-- ============================================================ -->
+  <interface id="guest_app">
+
+    <navigation type="bottom_tab_bar" tab_count="3">
+      <rationale>Campers operate in exactly two modes: (1) at-camp logistics mode and (2) out-exploring discovery mode. A third tab handles persistent saved state. Three tabs is the correct ceiling. Consider reducing to two tabs with Saved as a header icon.</rationale>
+    </navigation>
+
+    <global_chrome>
+      <element id="sticky_header" height_px="44">
+        <contains>campground logo, camp name, current temperature</contains>
+        <removed_from_here>language switcher (moved to gear icon), weather pill (condensed to temperature inline), wind/rain pill (removed — available inside place cards contextually)</removed_from_here>
+      </element>
+      <element id="hero_section" status="REMOVED">
+        <rationale>Hero image, "good morning" text, and weather details add no navigational or informational value on a mobile PWA. The sticky header carries sufficient branding and context.</rationale>
+      </element>
+      <element id="feedback_widget" trigger="contextual_only">
+        <rule>Feedback prompt appears only after a user dismisses a visited place card, not on a timer delay after app load.</rule>
+      </element>
+      <element id="language_switcher" location="gear_icon_in_header" />
+    </global_chrome>
+
+    <tab id="tab_1" name="Here" icon="house" index="0">
+      <intent>Everything a camper needs while physically present at the campground. Logistics, not discovery.</intent>
+      <absorbs_from_old_architecture>
+        <source tab="Puls">Wi-Fi card, quick actions grid, announcements, facilities list, contact card</source>
+        <source tab="Info">All content — phone, email, address, reception hours, Wi-Fi (deduplicated to single source here), checkout, trash, rules, emergency</source>
+      </absorbs_from_old_architecture>
+      <content_order priority="descending_by_access_frequency">
+        <section id="wifi" position="1">
+          <label>Wi-Fi</label>
+          <fields>network_name, password</fields>
+          <actions>copy_password</actions>
+          <constraint>THIS IS THE SINGLE AUTHORITATIVE SOURCE for Wi-Fi credentials. Must not appear on any other tab or section.</constraint>
+        </section>
+        <section id="quick_actions" position="2">
+          <label>Quick Actions</label>
+          <items>
+            <item id="checkout" expand_inline="true" content_source="settings.guest_info.checkout_text" />
+            <item id="trash" expand_inline="true" content_source="settings.guest_info.trash_text" />
+            <item id="rules" expand_inline="true" content_source="settings.guest_info.camp_rules_text" />
+            <item id="emergency" expand_inline="true" content_source="settings.guest_info.emergency_info" visual_treatment="danger_highlight" />
+          </items>
+          <pattern>Each item expands in-place (accordion) on tap. No navigation away.</pattern>
+        </section>
+        <section id="announcements" position="3">
+          <label>Notices</label>
+          <filter>active announcements only; weather-relevant items surfaced first</filter>
+          <types>info, warning</types>
+          <note>Event-type announcements do NOT appear here — they appear in Explore tab under the Events category filter.</note>
+        </section>
+        <section id="facilities" position="4">
+          <label>Facilities</label>
+          <fields>facility_name, walking_time_minutes</fields>
+          <note>Read-only in guest app. Managed by owner in dashboard under Places &gt; Facilities tab.</note>
+        </section>
+        <section id="contact" position="5">
+          <label>Contact</label>
+          <fields>phone, email, address, reception_hours</fields>
+          <actions>call_reception, find_reception_map</actions>
+        </section>
+      </content_order>
+      <removed_from_here>
+        <item name="My Stay carousel" replacement="Tab 3 (Saved)" />
+        <item name="Nearby Places list" replacement="Tab 2 (Explore) — pinned/recommended filter" />
+        <item name="AI Weather Tip" replacement="Tab 2 (Explore) — contextual weather-aware sort" />
+        <item name="See all info CTA" replacement="Redundant — this tab IS all the info" />
+        <item name="Bottom CTA link" replacement="DELETED" />
+      </removed_from_here>
+    </tab>
+
+    <tab id="tab_2" name="Explore" icon="compass_or_plus" index="1">
+      <intent>Everything outside the campground boundary — discovery, planning, deals, and events. One surface for all outward-facing content.</intent>
+      <absorbs_from_old_architecture>
+        <source tab="Utforska">All place cards with categories, distances, open/closed status, heart/save, directions</source>
+        <source tab="Planeraren">AI itinerary generation — demoted to a triggered feature, not a tab</source>
+        <source tab="Aktiviteter">Events (surfaced via category filter), partner promotions (integrated as flagged cards in the place list)</source>
+      </absorbs_from_old_architecture>
+      <primary_surface>
+        <type>categorised place list with filter pills</type>
+        <categories>Swim &amp; Cafe, Food &amp; Drink, Activities &amp; Fun, Nature &amp; Culture, Essentials, Events</categories>
+        <place_card_fields>image, emoji, name, distance_meters, open_closed_status, owner_tip, is_partner_boolean, partner_badge_if_true</place_card_fields>
+        <place_card_actions>save_heart, get_directions, reveal_discount_if_partner</place_card_actions>
+        <partner_card_treatment>
+          <rule>Partner cards are Place cards with a visual badge (e.g. "Partner offer") and an additional "Reveal discount" action that shows the coupon code. They appear inline in the category-filtered list — NOT in a separate section or tab.</rule>
+        </partner_card_treatment>
+        <events_filter_behaviour>
+          <rule>When "Events" category pill is selected, the list shows announcement items of type="event" from the owner dashboard. These are NOT shown on Tab 1 (Here).</rule>
+        </events_filter_behaviour>
+      </primary_surface>
+      <ai_planner_feature>
+        <trigger>Floating Action Button labelled "Plan my day ✦" — visible on Explore tab only</trigger>
+        <pattern>BOTTOM SHEET — slides up over the current list, preserving context. Does NOT navigate to a new tab or page.</pattern>
+        <sheet_content>
+          <header>current date, current weather summary</header>
+          <conditional_banner show_if="rain_forecast">Rain warning with indoor place recommendations</conditional_banner>
+          <timeline>
+            <block time="Morning" />
+            <block time="Lunch" />
+            <block time="Afternoon" />
+            <block time="Evening" />
+          </timeline>
+          <note>Each timeline block references existing Place records. AI-generated descriptions and tips are attached to the place card within the sheet.</note>
+        </sheet_content>
+      </ai_planner_feature>
+    </tab>
+
+    <tab id="tab_3" name="Saved" icon="heart" index="2">
+      <intent>Persistent list of places the camper has hearted. Lightweight — no additional content.</intent>
+      <absorbs_from_old_architecture>
+        <source tab="Puls">My Stay horizontal carousel</source>
+      </absorbs_from_old_architecture>
+      <content>List of Place cards the user has saved via the heart action in Tab 2.</content>
+      <upgrade_path>If the product team wants to reduce to 2 tabs, move Saved to a heart/profile icon in the sticky header. This is the recommended future direction.</upgrade_path>
+    </tab>
+
+  </interface>
+
+  <!-- ============================================================ -->
+  <!-- INTERFACE 2: OWNER DASHBOARD REDESIGN                        -->
+  <!-- ============================================================ -->
+  <interface id="owner_dashboard">
+
+    <navigation type="sidebar_left" desktop="true" mobile_fallback="top_header_plus_bottom_tabs">
+      <rationale>Owners visit the dashboard for one of three intent modes: (1) daily operations — checking analytics, managing places, posting announcements; (2) initial setup — configuring branding, contact details, guest info; (3) growth actions — managing partner deals, generating QR codes. The sidebar groups by these three modes, not by feature type.</rationale>
+      <intent_group id="G1" label="Daily Ops">
+        <nav_item id="analytics" label="Analytics" icon="bar_chart" />
+        <nav_item id="places" label="Places" icon="map_pin" />
+        <nav_item id="announcements" label="Announcements" icon="megaphone" />
+      </intent_group>
+      <intent_group id="G2" label="Setup">
+        <nav_item id="branding" label="Branding" icon="palette" />
+        <nav_item id="contact" label="Contact &amp; Hours" icon="phone" />
+        <nav_item id="guest_info" label="Guest Info" icon="info_circle" />
+      </intent_group>
+      <intent_group id="G3" label="Grow">
+        <nav_item id="partners" label="Partners" icon="handshake" />
+        <nav_item id="qr_share" label="QR &amp; Share" icon="qr_code" />
+      </intent_group>
+    </navigation>
+
+    <page id="analytics" nav_group="G1">
+      <content_identical_to_old_architecture nav_item="Översikt">true</content_identical_to_old_architecture>
+      <sections>time_period_selector, kpi_cards_4, area_chart, language_breakdown, saved_places_list, secondary_kpis, top_tabs_list, map_directions_list, recent_feedback</sections>
+    </page>
+
+    <page id="places" nav_group="G1">
+      <tab_bar type="horizontal_pills" position="top_of_page">
+        <tab id="all_places" label="All Places" default="true" />
+        <tab id="facilities" label="Facilities" />
+      </tab_bar>
+      <tab_content for="all_places">
+        <content_identical_to_old_architecture nav_item="Platser">true</content_identical_to_old_architecture>
+        <sections>search_input, show_hidden_toggle, new_place_button, category_filter_pills, place_card_grid</sections>
+        <place_card_actions>toggle_pin, toggle_hide, edit_owner_note, edit_details, delete</place_card_actions>
+        <add_place_form_fields>name, address, category, on_site_toggle, indoor_toggle, custom_hours</add_place_form_fields>
+      </tab_content>
+      <tab_content for="facilities">
+        <source_of_truth_for>facilities previously stranded in Settings page bottom section</source_of_truth_for>
+        <sections>facility_list, add_facility_form</sections>
+        <facility_fields>name, walking_time_minutes</facility_fields>
+        <rationale>Facilities are a type of on-site Place. They belong here, not in Settings. Moving them here removes the permanent-squatter pattern from Settings.</rationale>
+      </tab_content>
+    </page>
+
+    <page id="announcements" nav_group="G1">
+      <source_of_truth_for>announcements previously buried inside Settings &gt; Anslag sub-tab</source_of_truth_for>
+      <rationale>Owners post announcements frequently (weather alerts, events, notices). This is a daily operational task and must be a top-level nav item, not a Settings sub-tab.</rationale>
+      <sections>announcement_list, add_announcement_button</sections>
+      <announcement_fields>title, content, type_dropdown</announcement_fields>
+      <announcement_types>info, event, warning</announcement_types>
+    </page>
+
+    <page id="branding" nav_group="G2">
+      <source_of_truth_for>Settings &gt; Branding sub-tab</source_of_truth_for>
+      <fields>brand_color_picker, hero_image_url, image_focal_point_grid, logo_image_url</fields>
+    </page>
+
+    <page id="contact" nav_group="G2">
+      <source_of_truth_for>Settings &gt; Kontakt sub-tab</source_of_truth_for>
+      <fields>phone, email, address, reception_hours_textarea</fields>
+    </page>
+
+    <page id="guest_info" nav_group="G2">
+      <source_of_truth_for>Settings &gt; Gästinfo sub-tab</source_of_truth_for>
+      <fields>wifi_network_name, wifi_password, checkout_textarea, trash_textarea, camp_rules_textarea, emergency_info_textarea</fields>
+      <note>Wi-Fi credentials entered here are surfaced in Guest App Tab 1 (Here). This is the single edit point for Wi-Fi data.</note>
+    </page>
+
+    <page id="partners" nav_group="G3">
+      <content_identical_to_old_architecture nav_item="Partners">true</content_identical_to_old_architecture>
+      <sections>stats_banner, search_input, show_inactive_toggle, new_partner_button, partner_card_list</sections>
+      <partner_card_fields>logo, name, priority_rank, active_status, description, coupon_code, total_clicks</partner_card_fields>
+      <partner_card_actions>toggle_active, edit, delete</partner_card_actions>
+      <partner_form_fields>business_name, description, coupon_code, website, phone, logo_url, link_to_place_dropdown, priority_rank, start_date, end_date</partner_form_fields>
+      <note>Partners remain a separate management page from Places, but are rendered as augmented Place cards in the Guest App. The link_to_place_dropdown in the form is the data join between the two entities.</note>
+    </page>
+
+    <page id="qr_share" nav_group="G3">
+      <source_of_truth_for>previously hidden utility link "QR-kod" — promoted to primary nav</source_of_truth_for>
+      <rationale>The QR poster is the primary physical mechanism for driving guest app adoption. It must be a first-class nav item under Grow, not a hidden utility link. Renaming to "QR &amp; Share" reinforces its marketing function.</rationale>
+      <layout type="two_column_with_sticky_preview">
+        <left_column label="Controls">
+          <fields>template_picker, background_color, text_qr_color_with_contrast_warning, toggle_show_camp_name, toggle_show_slogan, slogan_text_input, qr_size_selector, paper_format_selector</fields>
+          <paper_formats>A4, A5, Card</paper_formats>
+        </left_column>
+        <right_column label="Preview" behaviour="sticky_live_canvas">
+          <actions>download_png, copy_url</actions>
+        </right_column>
+      </layout>
+    </page>
+
+    <deleted_elements>
+      <element id="settings_page" reason="Dissolved into three focused standalone pages: Branding, Contact &amp; Hours, and Guest Info. The nested pill-tab pattern inside Settings is eliminated entirely." />
+      <element id="settings_sub_tab_anslag" reason="Announcements promoted to top-level Daily Ops nav item." />
+      <element id="settings_facility_manager_bottom_section" reason="Facilities moved to Places &gt; Facilities tab." />
+      <element id="floating_utility_link_qr" reason="QR promoted to primary nav item QR &amp; Share." />
+      <element id="floating_utility_link_open_guest_view" reason="Moved to a persistent secondary action button in the dashboard header/topbar — always accessible, not buried." />
+    </deleted_elements>
+
+  </interface>
+
+  <!-- ============================================================ -->
+  <!-- UI PATTERN RECOMMENDATIONS                                   -->
+  <!-- ============================================================ -->
+  <ui_patterns>
+
+    <pattern id="UP1" name="Bottom Sheet (Pull-up Panel)">
+      <use_cases>
+        <case interface="guest_app" trigger="Plan my day FAB on Explore tab" content="AI Planner itinerary" />
+        <case interface="guest_app" trigger="Place card tap on mobile" content="Place detail view" />
+        <case interface="guest_app" trigger="Reveal discount button" content="Coupon code display" />
+        <case interface="owner_dashboard" trigger="Edit action on Place card (mobile)" content="Edit form" />
+      </use_cases>
+      <behaviour>Slides up from bottom of viewport. Background content remains visible but dimmed. Dismissible via swipe down or backdrop tap. Does NOT trigger full-page navigation. Preserves user's scroll position in the underlying list.</behaviour>
+      <implementation_notes>Use a detent/snap system: short content snaps to 40% viewport height, long content (AI planner) snaps to 85%. Always include a drag handle. Trap focus inside sheet when open for accessibility.</implementation_notes>
+    </pattern>
+
+    <pattern id="UP2" name="Contextual FAB (Floating Action Button)">
+      <use_cases>
+        <case interface="guest_app" location="Explore tab only" label="Plan my day ✦" action="triggers AI Planner bottom sheet" />
+        <case interface="owner_dashboard" location="Places page" label="+ New Place" action="opens add place form (inline expansion or bottom sheet on mobile)" />
+        <case interface="owner_dashboard" location="Announcements page" label="+ New Announcement" action="opens add announcement form" />
+      </use_cases>
+      <behaviour>FAB is context-aware — it reflects the primary creation action of the current page. It is NOT a global FAB that opens a menu of options. One page, one FAB, one action. The Explore tab FAB is the only exception where the action is generative (AI) rather than additive (CRUD).</behaviour>
+      <implementation_notes>On desktop Owner Dashboard, inline "New [entity]" buttons in the page topbar are preferred over a FAB. FAB is a mobile-first pattern. Use the Explore tab FAB to create visual hierarchy that signals AI capability without adding a tab.</implementation_notes>
+    </pattern>
+
+    <pattern id="UP3" name="Accordion Inline Edit (Expand-in-Place)">
+      <use_cases>
+        <case interface="owner_dashboard" location="Places list" trigger="Edit button on place card" content="Edit form expands inline below the card header" />
+        <case interface="guest_app" location="Tab 1 Here, Quick Actions section" trigger="Tap on Checkout / Trash / Rules / Emergency" content="Info text expands inline below the button" />
+      </use_cases>
+      <behaviour>Clicking Edit expands the card in-place to reveal form fields. The card does not navigate away to a detail page. Saving collapses the card back to its summary state. At most one card is expanded at a time — expanding a second card collapses the first. On mobile viewports (&lt;640px), the inline edit pattern falls back to a Bottom Sheet (UP1).</behaviour>
+      <implementation_notes>Animate the height expansion with a CSS transition (max-height: 0 to max-height: [computed]). Use a subtle left border accent in the brand color to visually indicate "edit mode" state. Cancel button must be prominently accessible without scrolling.</implementation_notes>
+    </pattern>
+
+  </ui_patterns>
+
+  <!-- ============================================================ -->
+  <!-- DATA FLOW: KEY CROSS-INTERFACE CONNECTIONS                   -->
+  <!-- ============================================================ -->
+  <data_flows>
+    <flow id="DF1">
+      <source_field>owner_dashboard &gt; guest_info &gt; wifi_network_name + wifi_password</source_field>
+      <destination>guest_app &gt; tab_1_here &gt; wifi_section</destination>
+      <rule>Single write point in dashboard. Single read point in guest app. No other location in either interface should display or allow editing of these values.</rule>
+    </flow>
+    <flow id="DF2">
+      <source_field>owner_dashboard &gt; announcements &gt; items where type = "event"</source_field>
+      <destination>guest_app &gt; tab_2_explore &gt; events_category_filter</destination>
+      <rule>Event-type announcements are surfaced in Explore under the Events filter. Info and Warning types are surfaced in Tab 1 Here under Notices. Type determines which tab in the guest app receives the content.</rule>
+    </flow>
+    <flow id="DF3">
+      <source_field>owner_dashboard &gt; partners &gt; active partner records with linked place_id</source_field>
+      <destination>guest_app &gt; tab_2_explore &gt; place cards with is_partner = true</destination>
+      <rule>A Partner record linked to a Place ID causes that place card in the guest app to render with a partner badge and a "Reveal discount" action. Inactive partners do not affect the guest app display.</rule>
+    </flow>
+    <flow id="DF4">
+      <source_field>owner_dashboard &gt; places &gt; facilities tab &gt; facility list</source_field>
+      <destination>guest_app &gt; tab_1_here &gt; facilities_section</destination>
+      <rule>Facilities are edited exclusively in the owner dashboard Places &gt; Facilities tab. Read-only in guest app.</rule>
+    </flow>
+    <flow id="DF5">
+      <source_field>owner_dashboard &gt; branding &gt; brand_color, hero_image_url, logo_image_url</source_field>
+      <destination>guest_app &gt; global_chrome &gt; sticky_header, theme_color</destination>
+      <rule>Branding values cascade to the guest app's visual theme. Hero image is used as a decorative element only if the product team reintroduces a reduced hero in a future iteration — not in the current redesign.</rule>
+    </flow>
+  </data_flows>
+
+</ia_specification>

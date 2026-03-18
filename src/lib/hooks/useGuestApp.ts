@@ -36,7 +36,8 @@ export function useGuestApp({
   weather,
   distanceMap,
 }: UseGuestAppParams) {
-  const [activeTab, setActiveTab] = useState<TabId>("puls");
+  const [activeTab, setActiveTab] = useState<TabId>("here");
+
   const [lang, setLang] = useState<Lang>("sv");
   const [currentHour, setCurrentHour] = useState(12);
   const [headerCollapsed, setHeaderCollapsed] = useState(false);

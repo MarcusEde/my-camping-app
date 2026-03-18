@@ -4,29 +4,53 @@
 import { hexToRgba } from "@/lib/utils";
 import type { Campground } from "@/types/database";
 import {
-  BarChart3,
+  BarChart2,
   ExternalLink,
+  Handshake,
+  Info,
   LogOut,
   MapPin,
+  Megaphone,
+  Palette,
+  Phone,
   QrCode,
-  Settings,
-  Users,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import React from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import React, { Suspense } from "react";
 
-/* ── Nav items ───────────────────────────────────────────── */
-// UI REDESIGN: Replaced emojis and descriptive sub-labels with crisp, B2B-standard Lucide icons.
-const NAV = [
-  { href: "/dashboard", label: "Översikt", icon: BarChart3, exact: true },
-  { href: "/dashboard/places", label: "Platser", icon: MapPin, exact: false },
-  { href: "/dashboard/partners", label: "Partners", icon: Users, exact: false },
+type NavItem = {
+  href: string;
+  label: string;
+  icon: React.ElementType;
+  exact: boolean;
+  tab: string | null;
+};
+
+/* ── Nav groups ──────────────────────────────────────────── */
+const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
-    href: "/dashboard/settings",
+    label: "Daglig drift",
+    items: [
+      { href: "/dashboard", label: "Analys", icon: BarChart2, exact: true, tab: null },
+      { href: "/dashboard/places", label: "Platser", icon: MapPin, exact: false, tab: null },
+      { href: "/dashboard/anslag", label: "Anslag", icon: Megaphone, exact: false, tab: null },
+    ],
+  },
+  {
     label: "Inställningar",
-    icon: Settings,
-    exact: false,
+    items: [
+      { href: "/dashboard/settings", label: "Varumärke", icon: Palette, exact: false, tab: "branding" },
+      { href: "/dashboard/settings", label: "Kontakt och tider", icon: Phone, exact: false, tab: "kontakt" },
+      { href: "/dashboard/settings", label: "Gästinfo", icon: Info, exact: false, tab: "gastinfo" },
+    ],
+  },
+  {
+    label: "Växt",
+    items: [
+      { href: "/dashboard/partners", label: "Partners", icon: Handshake, exact: false, tab: null },
+      { href: "/dashboard/qr", label: "QR och Dela", icon: QrCode, exact: false, tab: null },
+    ],
   },
 ];
 
@@ -37,29 +61,33 @@ interface Props {
   children: React.ReactNode;
 }
 
-/* ── Component ───────────────────────────────────────────── */
-export default function DashboardNav({
-  campground,
-  logoutAction,
-  children,
-}: Props) {
+/* ── Active-item logic needs search params — wrap in Suspense */
+function NavInner({ campground, logoutAction, children }: Props) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const brand = campground.primary_color || "#059669";
   const guestUrl = `/camp/${campground.slug}`;
 
-  const isActive = (href: string, exact: boolean) =>
-    exact ? pathname === href : pathname.startsWith(href);
+  const isActive = (href: string, exact: boolean, tab: string | null) => {
+    if (exact) return pathname === href && !tab;
+    if (!pathname.startsWith(href)) return false;
+    if (tab) return searchParams.get("tab") === tab;
+    // For non-settings items: active if path matches and no conflicting tab check needed
+    if (href === "/dashboard/settings") return false; // only tab-specific items activate
+    return true;
+  };
 
   const isLocked =
     campground.subscription_status === "inactive" ||
     campground.subscription_status === "cancelled";
 
-  // UI REDESIGN: Injected brand color as CSS variables at the root to allow clean Tailwind integration
-  // without relying on messy inline style objects on every single element.
   const cssVars = {
     "--theme-brand": brand,
     "--theme-brand-light": hexToRgba(brand, 0.08),
   } as React.CSSProperties;
+
+  // Flat list for mobile bottom bar (max 5)
+  const flatItems = NAV_GROUPS.flatMap((g) => g.items).slice(0, 5);
 
   return (
     <div
@@ -73,7 +101,6 @@ export default function DashboardNav({
         {/* Campground identity */}
         <div className="h-16 flex items-center px-6 border-b border-stone-200 shrink-0">
           <div className="flex items-center gap-3 w-full">
-            {/* UI REDESIGN: Removed the pastel emoji circle. Replaced with a sharp, professional brand block or real logo. */}
             {campground.logo_url ? (
               <img
                 src={campground.logo_url}
@@ -94,67 +121,52 @@ export default function DashboardNav({
         </div>
 
         {/* Main nav */}
-        <nav className="flex-1 overflow-y-auto px-4 py-6 space-y-1">
-          <p className="px-2 text-xs font-semibold text-stone-400 uppercase tracking-wider mb-4">
-            Meny
-          </p>
-          {NAV.map((item) => {
-            const active = isActive(item.href, item.exact);
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`group flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-all outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-brand)] ${
-                  active
-                    ? "bg-[var(--theme-brand-light)] text-[var(--theme-brand)]"
-                    : "text-stone-600 hover:bg-stone-100 hover:text-stone-900"
-                }`}
-              >
-                <Icon
-                  size={18}
-                  className={
-                    active
-                      ? "text-[var(--theme-brand)]"
-                      : "text-stone-400 group-hover:text-stone-600"
-                  }
-                  strokeWidth={active ? 2.5 : 2}
-                />
-                {item.label}
-              </Link>
-            );
-          })}
+        <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
+          {NAV_GROUPS.map((group) => (
+            <div key={group.label}>
+              {/* Group label */}
+              <p className="px-3 pt-2 pb-2 text-[10px] font-bold text-stone-400 uppercase tracking-widest">
+                {group.label}
+              </p>
+              <div className="space-y-0.5">
+                {group.items.map((item) => {
+                  const active = isActive(item.href, item.exact, item.tab);
+                  const Icon = item.icon;
+                  const href = item.tab
+                    ? `${item.href}?tab=${item.tab}`
+                    : item.href;
+                  return (
+                    <Link
+                      key={`${item.href}-${item.tab ?? "no-tab"}`}
+                      href={href}
+                      className={`group flex items-center gap-3 rounded-md pl-5 pr-3 py-2 text-sm font-medium transition-all outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-brand)] ${active
+                        ? "bg-[var(--theme-brand-light)] text-[var(--theme-brand)] border-l-2 border-[var(--theme-brand)] -ml-px pl-[18px]"
+                        : "text-stone-600 hover:bg-stone-100 hover:text-stone-900"
+                        }`}
+                    >
+                      <Icon
+                        size={16}
+                        className={
+                          active
+                            ? "text-[var(--theme-brand)]"
+                            : "text-stone-400 group-hover:text-stone-600"
+                        }
+                        strokeWidth={active ? 2.5 : 2}
+                      />
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
-        {/* Utility links Footer */}
-        <div className="p-4 border-t border-stone-200 space-y-1 bg-stone-50/50">
-          <Link
-            href="/dashboard/qr"
-            className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-900 transition-colors"
-          >
-            <QrCode size={18} className="text-stone-400" />
-            Skriv ut QR-kod
-          </Link>
-          <a
-            href={guestUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium text-[var(--theme-brand)] hover:bg-[var(--theme-brand-light)] transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <ExternalLink size={18} />
-              Öppna Gästvy
-            </div>
-          </a>
-          <form
-            action={logoutAction}
-            className="pt-2 mt-2 border-t border-stone-200"
-          >
+        {/* Footer: logout only */}
+        <div className="p-4 border-t border-stone-200 bg-stone-50/50">
+          <form action={logoutAction}>
             <button className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-stone-600 hover:bg-red-50 hover:text-red-600 transition-colors">
-              <LogOut
-                size={18}
-                className="text-stone-400 group-hover:text-red-500"
-              />
+              <LogOut size={18} className="text-stone-400" />
               Logga ut
             </button>
           </form>
@@ -164,8 +176,22 @@ export default function DashboardNav({
       {/* ═══════════════════════════════════════
           MAIN CONTENT AREA
           ═══════════════════════════════════════ */}
-      <div className="flex flex-1 flex-col overflow-hidden min-w-0 relative">
-        {/* Mobile top bar */}
+      <div className="flex flex-1 flex-col overflow-hidden min-w-0 relative bg-stone-50">
+        {/* Desktop topbar — Guest View button */}
+        <div className="hidden lg:flex items-center justify-end px-8 h-12 bg-white border-b border-stone-200 shrink-0 shadow-sm z-10 w-full mb-4">
+          <a
+            href={guestUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-bold text-white transition-all hover:opacity-90 active:scale-95 shadow-sm"
+            style={{ backgroundColor: brand }}
+          >
+            <ExternalLink size={14} />
+            Öppna Gästvy
+          </a>
+        </div>
+
+        {/* Mobile topbar */}
         <header className="flex lg:hidden items-center justify-between px-4 h-14 bg-white border-b border-stone-200 shrink-0 z-20">
           <div className="flex items-center gap-2.5">
             {campground.logo_url ? (
@@ -196,43 +222,38 @@ export default function DashboardNav({
         </header>
 
         {/* Page content */}
-        {/* UI REDESIGN: Added a subtle fade-in transition and removed the overarching lock blur logic from wrapping the exact DOM nodes to prevent jank, relying on CSS instead. */}
         <main
-          className={`flex-1 overflow-y-auto p-4 md:p-8 animate-fade-in ${
-            isLocked
-              ? "pointer-events-none select-none grayscale opacity-60"
-              : ""
-          }`}
+          className={`flex-1 overflow-y-auto px-4 pb-8 lg:px-8 animate-fade-in ${isLocked
+            ? "pointer-events-none select-none grayscale opacity-60"
+            : ""
+            }`}
         >
           <div className="max-w-6xl mx-auto">{children}</div>
         </main>
 
-        {/* Mobile bottom tab bar */}
+        {/* Mobile bottom tab bar — first 5 flattened items */}
         <nav className="flex lg:hidden items-stretch h-16 border-t border-stone-200 bg-white shrink-0 z-20 pb-safe">
-          {NAV.map((item) => {
-            const active = isActive(item.href, item.exact);
+          {flatItems.map((item) => {
+            const active = isActive(item.href, item.exact, item.tab);
             const Icon = item.icon;
+            const href = item.tab ? `${item.href}?tab=${item.tab}` : item.href;
             return (
               <Link
-                key={item.href}
-                href={item.href}
+                key={`${item.href}-${item.tab ?? "no-tab"}`}
+                href={href}
                 className="flex flex-1 flex-col items-center justify-center gap-1 py-2 px-1 relative"
               >
                 <Icon
                   size={20}
-                  className={
-                    active ? "text-[var(--theme-brand)]" : "text-stone-400"
-                  }
+                  className={active ? "text-[var(--theme-brand)]" : "text-stone-400"}
                   strokeWidth={active ? 2.5 : 2}
                 />
                 <span
-                  className={`text-[10px] font-medium tracking-wide ${
-                    active ? "text-[var(--theme-brand)]" : "text-stone-500"
-                  }`}
+                  className={`text-[9px] font-bold tracking-tight truncate w-full text-center px-0.5 ${active ? "text-[var(--theme-brand)]" : "text-stone-500"
+                    }`}
                 >
                   {item.label}
                 </span>
-                {/* Active Indicator */}
                 {active && (
                   <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[3px] bg-[var(--theme-brand)] rounded-b-md" />
                 )}
@@ -242,5 +263,14 @@ export default function DashboardNav({
         </nav>
       </div>
     </div>
+  );
+}
+
+/* ── Exported wrapper — Suspense needed for useSearchParams ── */
+export default function DashboardNav(props: Props) {
+  return (
+    <Suspense fallback={null}>
+      <NavInner {...props} />
+    </Suspense>
   );
 }

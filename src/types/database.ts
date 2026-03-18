@@ -281,6 +281,15 @@ export type SavedPlaceAnalytics = {
   session_id: string;
   created_at: string;
 };
+
+export type PlanCache = {
+  cache_key: string;
+  campground_id: string;
+  envelope: any;
+  date_str: string;
+  updated_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -350,6 +359,12 @@ export type Database = {
         Update: Partial<Omit<SavedPlaceAnalytics, "id" | "created_at">>;
         Relationships: [];
       };
+      plan_cache: {
+        Row: PlanCache;
+        Insert: PlanCache;
+        Update: Partial<PlanCache>;
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -368,3 +383,4 @@ export type Database = {
     };
   };
 };
+

@@ -213,13 +213,10 @@ export default function QRDesigner({ campground, baseUrl }: Props) {
                   value={s.slogan}
                   onChange={(e) => s.setSlogan(e.target.value)}
                   placeholder="Skanna för att utforska!"
-                  className="w-full rounded-xl bg-white px-4 py-2.5 text-[13px] text-stone-800 ring-1 ring-stone-200 placeholder:text-stone-300 focus:outline-none focus:ring-2"
-                  style={
-                    {
-                      "--tw-ring-color": hexToRgba(s.brand, 0.3),
-                    } as React.CSSProperties
-                  }
+                  className={`w-full rounded-xl bg-white px-4 py-2.5 text-[13px] text-stone-800 ring-1 focus:outline-none focus:ring-2 ${s.slogan.length > 50 ? 'ring-red-500 placeholder:text-red-300' : 'ring-stone-200 placeholder:text-stone-300'}`}
+                  style={s.slogan.length <= 50 ? { "--tw-ring-color": hexToRgba(s.brand, 0.3) } as React.CSSProperties : {}}
                 />
+                {s.slogan.length > 50 && <p className="mt-1 px-1 text-[10px] font-bold text-red-500">Max 50 tecken.</p>}
               </div>
             )}
           </div>
