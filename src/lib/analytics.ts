@@ -88,7 +88,7 @@ export async function getAnalyticsStats(
   const prevUniqueSessions = new Set(prevViews.map((v) => v.session_id)).size;
 
   // ── Planner usage ──
-  const plannerViews = views.filter((v) => v.tab === "planerare").length;
+  const plannerViews = 0;
 
   // ── Tab breakdown ──
   const tabCounts = new Map<string, number>();
@@ -260,7 +260,7 @@ export async function getQuickStats(campgroundId: string) {
   return {
     totalViews: views.length,
     uniqueGuests: new Set(views.map((v) => v.session_id)).size,
-    plannerUses: views.filter((v) => v.tab === "planerare").length,
+    plannerUses: 0,
     avgRating:
       feedback.length > 0
         ? (

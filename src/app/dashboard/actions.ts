@@ -3,6 +3,7 @@
 import { requireCampground } from "@/lib/auth-guard";
 import {
   translateAnnouncement,
+  translateFacility,
   translateNote,
   translatePartner,
   translateSettings,
@@ -114,6 +115,16 @@ async function safeTranslateAnnouncement(
     return await translateAnnouncement(title, content);
   } catch (err) {
     console.error("[Translation] Announcement translation failed:", err);
+    return null;
+  }
+}
+async function safeTranslateFacility(
+  name: string,
+): Promise<Record<string, unknown> | null> {
+  try {
+    return await translateFacility(name);
+  } catch (err) {
+    console.error("[Translation] Facility translation failed:", err);
     return null;
   }
 }
@@ -703,15 +714,26 @@ export async function saveFacility(
   const data = validated.data;
   const { supabase, campground } = await requireCampground(campgroundId);
 
+  const trimmedName = data.name.trim();
+
+  // Translate the facility name
+  const nameTranslations = await safeTranslateFacility(trimmedName);
+
+  const insertPayload: Record<string, unknown> = {
+    campground_id: campground.id,
+    name: trimmedName,
+    type: data.type,
+    walking_minutes: data.walking_minutes,
+    is_active: data.is_active,
+  };
+
+  if (nameTranslations) {
+    insertPayload.name_translations = nameTranslations;
+  }
+
   const { data: inserted, error } = await supabase
     .from("internal_locations")
-    .insert({
-      campground_id: campground.id,
-      name: data.name,
-      type: data.type,
-      walking_minutes: data.walking_minutes,
-      is_active: data.is_active,
-    })
+    .insert(insertPayload)
     .select("id")
     .single();
 

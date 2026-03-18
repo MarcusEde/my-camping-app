@@ -35,11 +35,9 @@ import {
 
 /* ── Constants ───────────────────────────────────────────── */
 const TAB_LABELS: Record<string, string> = {
-  puls: "Hem",
-  planerare: "Planerare",
-  utforska: "Utforska",
-  aktiviteter: "Aktiviteter",
-  info: "Info",
+  here: "Här",
+  explore: "Utforska",
+  saved: "Sparade",
 };
 
 const LANG_META: Record<string, { flag: string; label: string }> = {
@@ -103,11 +101,10 @@ export default function AnalyticsDashboard({ campgroundId, brand }: Props) {
             <button
               key={d}
               onClick={() => setPeriod(d)}
-              className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.1em] transition-all ${
-                period === d
+              className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.1em] transition-all ${period === d
                   ? "bg-white text-stone-900 shadow-sm"
                   : "text-stone-400 hover:text-stone-600"
-              }`}
+                }`}
             >
               {d}d
             </button>
@@ -655,11 +652,10 @@ function KpiCard({
 }) {
   return (
     <div
-      className={`rounded-2xl p-4 ring-1 ${
-        highlight
+      className={`rounded-2xl p-4 ring-1 ${highlight
           ? "bg-emerald-50/50 ring-emerald-200/60"
           : "bg-white ring-stone-200/60"
-      }`}
+        }`}
     >
       <div className="flex items-center justify-between">
         <div
@@ -670,9 +666,8 @@ function KpiCard({
         </div>
         {change !== undefined && change !== 0 && (
           <span
-            className={`flex items-center gap-0.5 text-[9px] font-black ${
-              change > 0 ? "text-emerald-500" : "text-red-400"
-            }`}
+            className={`flex items-center gap-0.5 text-[9px] font-black ${change > 0 ? "text-emerald-500" : "text-red-400"
+              }`}
           >
             {change > 0 ? <TrendingUp size={9} /> : <TrendingDown size={9} />}
             {change > 0 ? "+" : ""}
@@ -684,9 +679,8 @@ function KpiCard({
         {isString ? value : (value as number).toLocaleString("sv-SE")}
       </p>
       <p
-        className={`text-[10px] font-black uppercase tracking-[0.18em] leading-tight mt-0.5 ${
-          highlight ? "text-emerald-500" : "text-stone-300"
-        }`}
+        className={`text-[10px] font-black uppercase tracking-[0.18em] leading-tight mt-0.5 ${highlight ? "text-emerald-500" : "text-stone-300"
+          }`}
       >
         {subtitle ?? label}
       </p>

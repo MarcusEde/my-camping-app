@@ -19,7 +19,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Compass, Heart, Home } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import GuestFeedbackWidget from "./GuestFeedbackWidget";
-import ExploreTab from "./tabs/ExploreTab";
+import ExploreTab from "./tabs/explore";
 import HereTab from "./tabs/HereTab";
 import SavedTab from "./tabs/SavedTab";
 export default function GuestAppUI({

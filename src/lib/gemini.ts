@@ -211,3 +211,45 @@ Only include the field keys that were provided above:
 }
 
 // ─── generateItinerary ───────────────────────────────────
+// ─── translateFacility ───────────────────────────────────
+
+export async function translateFacility(
+  name: string,
+): Promise<Record<string, { name: string }>> {
+  if (!name.trim()) return {};
+
+  try {
+    const model = getModel();
+
+    const prompt = `
+You are a professional translator for a Scandinavian camping app.
+Translate the following Swedish campsite facility name into English (en), German (de), Danish (da), Dutch (nl) and Norwegian Bokmål (no).
+These are short labels like "Servicehus A", "Toalett vid stranden", etc. Keep translations equally short and natural.
+
+Swedish facility name: "${name}"
+
+Return ONLY valid JSON matching this exact shape (no markdown, no wrapping):
+{
+  "en": { "name": "…" },
+  "de": { "name": "…" },
+  "da": { "name": "…" },
+  "nl": { "name": "…" },
+  "no": { "name": "…" }
+}`;
+
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        responseMimeType: "application/json",
+        temperature: 0.3,
+      },
+    });
+
+    const text = result.response.text();
+    const cleaned = repairJSON(text);
+    return JSON.parse(cleaned) as Record<string, { name: string }>;
+  } catch (err) {
+    console.error("[translateFacility] failed:", err);
+    return {};
+  }
+}

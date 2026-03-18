@@ -4,6 +4,13 @@
  * Source of truth for all database entity types.
  * Synced with the Supabase schema.
  */
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[];
 
 export type SubscriptionStatus = "trial" | "active" | "inactive" | "cancelled";
 
@@ -187,11 +194,18 @@ export type InternalLocation = {
   id: string;
   campground_id: string;
   name: string;
+  name_translations?: {
+    en?: { name: string };
+    de?: { name: string };
+    da?: { name: string };
+    nl?: { name: string };
+    no?: { name: string };
+  } | null;
   type: string;
   walking_minutes: number;
   is_active: boolean;
   created_at: string;
-};
+}
 
 // ─── Utility types ────────────────────────────────────────
 
@@ -281,11 +295,15 @@ export type SavedPlaceAnalytics = {
   session_id: string;
   created_at: string;
 };
-
+export type PartnerClick = {
+  id: string;
+  partner_id: string;
+  created_at: string;
+};
 export type PlanCache = {
   cache_key: string;
   campground_id: string;
-  envelope: any;
+  envelope: Record<string, unknown>;
   date_str: string;
   updated_at: string;
 };
@@ -363,6 +381,12 @@ export type Database = {
         Row: PlanCache;
         Insert: PlanCache;
         Update: Partial<PlanCache>;
+        Relationships: [];
+      };
+      partner_clicks: {
+        Row: PartnerClick;
+        Insert: Omit<PartnerClick, "id" | "created_at">;
+        Update: Partial<Omit<PartnerClick, "id" | "created_at">>;
         Relationships: [];
       };
     };
